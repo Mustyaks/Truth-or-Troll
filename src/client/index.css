@@ -1,1 +1,39 @@
 @import 'tailwindcss';
+
+/* Ensure proper rendering in Reddit post environment */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  height: 100vh;
+  min-height: 600px;
+  max-height: 800px;
+  width: 100%;
+  position: relative;
+}
+
+/* Responsive adjustments for post environment */
+@media (max-width: 768px) {
+  #root {
+    min-height: 500px;
+    max-height: 700px;
+  }
+}
+
+/* Ensure text is readable in all environments */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent text selection issues in post environment */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}

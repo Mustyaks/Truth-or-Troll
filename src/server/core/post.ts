@@ -8,20 +8,21 @@ export const createPost = async () => {
 
   return await reddit.submitCustomPost({
     splash: {
-      // Splash Screen Configuration
-      appDisplayName: '<% name %>',
+      // Splash Screen Configuration for Reddit Post
+      appDisplayName: 'Truth or Troll',
       backgroundUri: 'default-splash.png',
-      buttonLabel: 'Tap to Start',
-      description: 'An exciting interactive experience',
-      entryUri: 'index.html',
-      heading: 'Welcome to the Game!',
+      buttonLabel: '🎮 Play Game',
+      description:
+        'Test your ability to distinguish real Reddit posts from AI-generated fakes. Challenge your detective skills!',
+      heading: '🎯 Truth or Troll',
       appIconUri: 'default-icon.png',
     },
     postData: {
-      gameState: 'initial',
-      score: 0,
+      gameType: 'truth-or-troll',
+      version: '1.0.0',
+      created: Date.now(),
     },
     subredditName: subredditName,
-    title: '<% name %>',
+    title: '🎯 Truth or Troll - Can You Spot the Fake Reddit Posts? 🕵️',
   });
 };

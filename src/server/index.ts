@@ -91,6 +91,93 @@ router.post<{ postId: string }, DecrementResponse | { status: string; message: s
   }
 );
 
+// Game-specific endpoints
+router.post('/api/save-score', async (req, res): Promise<void> => {
+  try {
+    const { username, score, accuracy } = req.body;
+    const { postId } = context;
+
+    if (!postId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'postId is required',
+      });
+      return;
+    }
+
+    // Save score to Redis with post-specific key
+    const scoreKey = `scores:${postId}`;
+    const scoreData = {
+      username: username || 'Anonymous',
+      score: parseInt(score) || 0,
+      accuracy: parseInt(accuracy) || 0,
+      timestamp: Date.now(),
+    };
+
+    // Use Redis hash to store individual scores with timestamp as field
+    const scoreField = `${Date.now()}-${scoreData.username}`;
+    await redis.hSet(scoreKey, { [scoreField]: JSON.stringify(scoreData) });
+
+    res.json({
+      status: 'success',
+      message: 'Score saved successfully',
+    });
+  } catch (error) {
+    console.error('Error saving score:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to save score',
+    });
+  }
+});
+
+router.get('/api/leaderboard', async (_req, res): Promise<void> => {
+  try {
+    const { postId } = context;
+
+    if (!postId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'postId is required',
+      });
+      return;
+    }
+
+    // Get all scores from Redis hash
+    const scoreKey = `scores:${postId}`;
+    const allScores = await redis.hGetAll(scoreKey);
+
+    // Parse and sort scores
+    const leaderboard = Object.values(allScores)
+      .map((scoreStr) => {
+        try {
+          return JSON.parse(scoreStr);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score) // Sort by score descending
+      .slice(0, 50) // Top 50 scores
+      .map((scoreData, index) => ({
+        rank: index + 1,
+        ...scoreData,
+      }));
+
+    res.json({
+      status: 'success',
+      leaderboard,
+    });
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch leaderboard',
+      leaderboard: [],
+    });
+  }
+});
+
 router.post('/internal/on-app-install', async (_req, res): Promise<void> => {
   try {
     const post = await createPost();

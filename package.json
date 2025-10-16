@@ -20,6 +20,8 @@
     "lint:fix": "eslint --fix ./src",
     "login": "devvit login",
     "launch": "npm run build && npm run deploy && devvit publish",
+    "test:build": "npm run build && echo 'Build successful - ready for deployment'",
+    "validate": "npm run check && npm run test:build",
     "prettier": "prettier-package-json --write ./package.json && prettier --write .",
     "type-check": "tsc --build"
   },

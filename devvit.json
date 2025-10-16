@@ -1,11 +1,13 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "<% name %>",
+  "name": "truth-or-troll",
+  "version": "1.0.0",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
       "default": {
-        "entry": "index.html"
+        "entry": "index.html",
+        "trigger": "post"
       }
     }
   },
@@ -19,8 +21,8 @@
   "menu": {
     "items": [
       {
-        "label": "Create a new post",
-        "description": "<% name %>",
+        "label": "Create Truth or Troll Post",
+        "description": "Start a new Truth or Troll game",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-create"
@@ -29,5 +31,13 @@
   },
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
+  },
+  "capabilities": {
+    "http": {
+      "fetch": ["reddit.com", "www.reddit.com"]
+    }
+  },
+  "dev": {
+    "subreddit": "truth_or_troll_dev"
   }
 }
