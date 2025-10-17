@@ -91,7 +91,75 @@ router.post<{ postId: string }, DecrementResponse | { status: string; message: s
   }
 );
 
-// Game-specific endpoints
+// New leaderboard endpoints using KV store
+router.post('/api/submit-answer', async (req, res): Promise<void> => {
+  try {
+    const { username, correct } = req.body;
+    
+    if (!username) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Username is required',
+      });
+      return;
+    }
+
+    // Get current leaderboard from Redis
+    const leaderboardData = await redis.get('global_leaderboard');
+    const leaderboard = leaderboardData ? JSON.parse(leaderboardData) : {};
+    
+    // Initialize user if they don't exist
+    if (!leaderboard[username]) {
+      leaderboard[username] = { score: 0, plays: 0 };
+    }
+    
+    // Update user stats
+    leaderboard[username].plays += 1;
+    if (correct) {
+      leaderboard[username].score += 1;
+    }
+    
+    // Save updated leaderboard to Redis
+    await redis.set('global_leaderboard', JSON.stringify(leaderboard));
+    
+    res.json({
+      success: true,
+      leaderboard: leaderboard[username],
+    });
+  } catch (error) {
+    console.error('Error submitting answer:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to submit answer',
+    });
+  }
+});
+
+router.get('/api/leaderboard-kv', async (_req, res): Promise<void> => {
+  try {
+    // Get leaderboard from Redis
+    const leaderboardData = await redis.get('global_leaderboard');
+    const leaderboard = leaderboardData ? JSON.parse(leaderboardData) : {};
+    
+    // Sort by score and get top 10
+    const sorted = Object.entries(leaderboard)
+      .sort(([, a], [, b]) => (b as any).score - (a as any).score)
+      .slice(0, 10);
+    
+    res.json({
+      topPlayers: sorted,
+    });
+  } catch (error) {
+    console.error('Error fetching KV leaderboard:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch leaderboard',
+      topPlayers: [],
+    });
+  }
+});
+
+// Game-specific endpoints (existing Redis-based)
 router.post('/api/save-score', async (req, res): Promise<void> => {
   try {
     const { username, score, accuracy } = req.body;

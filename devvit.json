@@ -1,7 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "truth-or-troll",
-  "version": "1.0.0",
   "post": {
     "dir": "dist/client",
     "entrypoints": {
@@ -31,11 +30,6 @@
   },
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
-  },
-  "capabilities": {
-    "http": {
-      "fetch": ["reddit.com", "www.reddit.com"]
-    }
   },
   "dev": {
     "subreddit": "truth_or_troll_dev"

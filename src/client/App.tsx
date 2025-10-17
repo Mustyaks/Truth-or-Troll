@@ -10,8 +10,6 @@ export const App = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [gameScore, setGameScore] = useState<number | undefined>();
   const [username, setUsername] = useState<string>('');
-  const [isInPost, setIsInPost] = useState(false);
-
   useEffect(() => {
     // Detect if we're running inside a Reddit post
     const checkPostEnvironment = () => {
@@ -19,7 +17,8 @@ export const App = () => {
       const isRedditPost = window.parent !== window || 
                           window.location !== window.parent.location ||
                           document.referrer.includes('reddit.com');
-      setIsInPost(isRedditPost);
+      // Could use this for post-specific behavior if needed
+      console.log('Running in Reddit post:', isRedditPost);
     };
 
     checkPostEnvironment();
@@ -60,6 +59,7 @@ export const App = () => {
         <GameRound
           onGameComplete={handleGameComplete}
           onViewLeaderboard={handleViewLeaderboard}
+          username={username}
         />
       );
     

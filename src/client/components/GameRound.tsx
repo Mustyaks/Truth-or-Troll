@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { generateFakePost, fetchRealPost } from '../../shared/kiroService';
+import { submitAnswer } from '../../shared/apiService';
 
 interface Post {
   id: string;
@@ -14,6 +15,7 @@ interface Post {
 interface GameRoundProps {
   onGameComplete: (finalScore: number) => void;
   onViewLeaderboard: () => void;
+  username: string;
 }
 
 type FeedbackState = {
@@ -211,7 +213,7 @@ const PostCard = ({
   );
 };
 
-export const GameRound = ({ onGameComplete, onViewLeaderboard }: GameRoundProps) => {
+export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameRoundProps) => {
   const [currentRound, setCurrentRound] = useState(1);
   const [score, setScore] = useState(0);
   const [currentPosts, setCurrentPosts] = useState<Post[]>([]);
@@ -286,7 +288,7 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard }: GameRoundProps)
     initializeRound();
   }, []);
 
-  const handleVote = (postId: string, vote: 'real' | 'fake') => {
+  const handleVote = async (postId: string, vote: 'real' | 'fake') => {
     if (votingDisabled) return;
 
     const post = currentPosts.find(p => p.id === postId);
@@ -306,6 +308,13 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard }: GameRoundProps)
       isCorrect,
       message: isCorrect ? 'Correct! 🎉' : 'Oops! 😅'
     });
+
+    // Submit answer to leaderboard
+    try {
+      await submitAnswer(username, isCorrect);
+    } catch (error) {
+      console.error('Failed to submit answer to leaderboard:', error);
+    }
 
     // After 2 seconds, move to next round or end game
     setTimeout(async () => {

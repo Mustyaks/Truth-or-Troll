@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getLeaderboard as getKVLeaderboard } from '../../shared/apiService';
 import { getLeaderboard, clearLeaderboard, type LeaderboardEntry } from '../../shared/leaderboardService';
 
 interface LeaderboardProps {
@@ -17,33 +18,30 @@ const getRankIcon = (rank: number) => {
   }
 };
 
-const LeaderboardRow = ({ 
-  entry, 
-  rank, 
-  isCurrentUser = false 
-}: { 
-  entry: LeaderboardEntry; 
+const LeaderboardRow = ({
+  entry,
+  rank,
+  isCurrentUser = false
+}: {
+  entry: LeaderboardEntry;
   rank: number;
   isCurrentUser?: boolean;
 }) => (
-  <tr className={`group transition-all duration-200 ${
-    isCurrentUser 
-      ? 'bg-gradient-to-r from-orange-50 to-red-50 border-l-4 border-orange-400' 
-      : 'hover:bg-gray-50 hover:shadow-sm'
-  }`}>
+  <tr className={`group transition-all duration-200 ${isCurrentUser
+    ? 'bg-gradient-to-r from-orange-50 to-red-50 border-l-4 border-orange-400'
+    : 'hover:bg-gray-50 hover:shadow-sm'
+    }`}>
     <td className="px-3 sm:px-4 py-4 text-center">
-      <div className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full font-bold text-sm sm:text-base ${
-        rank <= 3 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white shadow-lg' : 
+      <div className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full font-bold text-sm sm:text-base ${rank <= 3 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white shadow-lg' :
         'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-      } transition-all duration-200`}>
+        } transition-all duration-200`}>
         {getRankIcon(rank)}
       </div>
     </td>
     <td className="px-3 sm:px-4 py-4">
       <div className="flex items-center space-x-2 sm:space-x-3">
-        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base ${
-          isCurrentUser ? 'bg-gradient-to-br from-orange-500 to-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-500'
-        }`}>
+        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base ${isCurrentUser ? 'bg-gradient-to-br from-orange-500 to-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-500'
+          }`}>
           {entry.username.charAt(0).toUpperCase()}
         </div>
         <div>
@@ -68,12 +66,11 @@ const LeaderboardRow = ({
       <div className="text-xs text-gray-500">points</div>
     </td>
     <td className="px-3 sm:px-4 py-4 text-center">
-      <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${
-        entry.accuracy >= 90 ? 'bg-green-100 text-green-700 border border-green-200' :
+      <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${entry.accuracy >= 90 ? 'bg-green-100 text-green-700 border border-green-200' :
         entry.accuracy >= 80 ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
-        entry.accuracy >= 70 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-        'bg-red-100 text-red-700 border border-red-200'
-      }`}>
+          entry.accuracy >= 70 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+            'bg-red-100 text-red-700 border border-red-200'
+        }`}>
         {entry.accuracy >= 90 ? '🔥' : entry.accuracy >= 80 ? '⚡' : entry.accuracy >= 70 ? '👍' : '💪'} {entry.accuracy}%
       </span>
     </td>
@@ -82,10 +79,26 @@ const LeaderboardRow = ({
 
 export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, currentUsername }: LeaderboardProps) => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [kvLeaderboard, setKvLeaderboard] = useState<Array<[string, { score: number; plays: number }]>>([]);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showKvLeaderboard, setShowKvLeaderboard] = useState(true);
 
   useEffect(() => {
+    // Load both leaderboards
     setLeaderboard(getLeaderboard());
+
+    // Fetch KV leaderboard from server
+    const fetchKvLeaderboard = async () => {
+      try {
+        const response = await getKVLeaderboard();
+        setKvLeaderboard(response.topPlayers);
+      } catch (error) {
+        console.error('Failed to fetch KV leaderboard:', error);
+        setShowKvLeaderboard(false);
+      }
+    };
+
+    fetchKvLeaderboard();
   }, []);
 
   const handleClearLeaderboard = () => {
@@ -96,8 +109,8 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
 
   const isCurrentUserEntry = (entry: LeaderboardEntry, _index: number) => {
     if (!currentUsername || !currentUserScore) return false;
-    return entry.username.toLowerCase() === currentUsername.toLowerCase() && 
-           entry.score === currentUserScore;
+    return entry.username.toLowerCase() === currentUsername.toLowerCase() &&
+      entry.score === currentUserScore;
   };
 
   return (
@@ -124,9 +137,9 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
               <p className="text-3xl sm:text-4xl lg:text-5xl font-bold">{currentUserScore}</p>
               <p className="text-orange-100 text-sm sm:text-base">
                 {currentUserScore >= 800 ? "Outstanding! You're a master detective! 🕵️" :
-                 currentUserScore >= 600 ? "Great job! Keep playing to improve your ranking! 🚀" :
-                 currentUserScore >= 400 ? "Good start! Practice makes perfect! 💪" :
-                 "Keep trying! You'll get better with practice! 🎯"}
+                  currentUserScore >= 600 ? "Great job! Keep playing to improve your ranking! 🚀" :
+                    currentUserScore >= 400 ? "Good start! Practice makes perfect! 💪" :
+                      "Keep trying! You'll get better with practice! 🎯"}
               </p>
             </div>
           </div>
@@ -135,13 +148,25 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
         {/* Leaderboard Table */}
         <div className="bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden mb-6 sm:mb-8">
           <div className="bg-gradient-to-r from-orange-50 to-red-50 px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200">
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center space-x-2">
-              <span className="text-orange-500">📊</span>
-              <span>Global Rankings</span>
-            </h3>
-            <p className="text-xs sm:text-sm text-gray-600 mt-1">Updated in real-time</p>
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center space-x-2">
+                  <span className="text-orange-500">📊</span>
+                  <span>{showKvLeaderboard ? 'Answer Accuracy Rankings' : 'Game Score Rankings'}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                  {showKvLeaderboard ? 'Based on correct answers per attempt' : 'Based on total game scores'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowKvLeaderboard(!showKvLeaderboard)}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+              >
+                Switch View
+              </button>
+            </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
@@ -161,24 +186,90 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {leaderboard.length > 0 ? (
-                  leaderboard.slice(0, 10).map((entry, index) => (
-                    <LeaderboardRow 
-                      key={`${entry.username}-${entry.timestamp}`}
-                      entry={entry}
-                      rank={index + 1}
-                      isCurrentUser={isCurrentUserEntry(entry, index)}
-                    />
-                  ))
+                {showKvLeaderboard ? (
+                  // KV Leaderboard (Answer-based)
+                  kvLeaderboard.length > 0 ? (
+                    kvLeaderboard.map(([username, stats], index) => (
+                      <tr key={username} className={`group transition-all duration-200 ${username.toLowerCase() === currentUsername?.toLowerCase()
+                        ? 'bg-gradient-to-r from-orange-50 to-red-50 border-l-4 border-orange-400'
+                        : 'hover:bg-gray-50 hover:shadow-sm'
+                        }`}>
+                        <td className="px-3 sm:px-4 py-4 text-center">
+                          <div className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full font-bold text-sm sm:text-base ${index < 3 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white shadow-lg' :
+                            'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
+                            } transition-all duration-200`}>
+                            {getRankIcon(index + 1)}
+                          </div>
+                        </td>
+                        <td className="px-3 sm:px-4 py-4">
+                          <div className="flex items-center space-x-2 sm:space-x-3">
+                            <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base ${username.toLowerCase() === currentUsername?.toLowerCase() ? 'bg-gradient-to-br from-orange-500 to-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                              }`}>
+                              {username.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <span className={`font-semibold text-sm sm:text-base ${username.toLowerCase() === currentUsername?.toLowerCase() ? 'text-orange-700' : 'text-gray-900'}`}>
+                                {username}
+                              </span>
+                              {username.toLowerCase() === currentUsername?.toLowerCase() && (
+                                <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-medium">
+                                  You
+                                </span>
+                              )}
+                              <div className="text-xs text-gray-500 mt-1">
+                                {stats.plays} attempts
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 sm:px-4 py-4 text-center">
+                          <div className="font-bold text-lg sm:text-xl text-gray-900">
+                            {stats.score}
+                          </div>
+                          <div className="text-xs text-gray-500">correct</div>
+                        </td>
+                        <td className="px-3 sm:px-4 py-4 text-center">
+                          <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${(stats.score / stats.plays) >= 0.9 ? 'bg-green-100 text-green-700 border border-green-200' :
+                            (stats.score / stats.plays) >= 0.8 ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
+                              (stats.score / stats.plays) >= 0.7 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                                'bg-red-100 text-red-700 border border-red-200'
+                            }`}>
+                            {stats.plays > 0 ? `${Math.round((stats.score / stats.plays) * 100)}%` : '0%'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                        <div className="space-y-2">
+                          <p className="text-lg">🎯 No answers submitted yet!</p>
+                          <p className="text-sm">Play the game to see accuracy rankings.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )
                 ) : (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                      <div className="space-y-2">
-                        <p className="text-lg">🎯 No scores yet!</p>
-                        <p className="text-sm">Be the first to set a high score.</p>
-                      </div>
-                    </td>
-                  </tr>
+                  // Original localStorage Leaderboard (Game-based)
+                  leaderboard.length > 0 ? (
+                    leaderboard.slice(0, 10).map((entry, index) => (
+                      <LeaderboardRow
+                        key={`${entry.username}-${entry.timestamp}`}
+                        entry={entry}
+                        rank={index + 1}
+                        isCurrentUser={isCurrentUserEntry(entry, index)}
+                      />
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                        <div className="space-y-2">
+                          <p className="text-lg">🎯 No game scores yet!</p>
+                          <p className="text-sm">Complete a full game to see scores here.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )
                 )}
               </tbody>
             </table>
