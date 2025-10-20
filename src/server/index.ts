@@ -12,6 +12,166 @@ app.use(express.urlencoded({ extended: true }));
 // Middleware for plain text body parsing
 app.use(express.text());
 
+// Shared leaderboard key for all players
+const LEADERBOARD_KEY = 'leaderboard';
+
+// Leaderboard entry interface
+interface LeaderboardEntry {
+  username: string;
+  score: number;
+  accuracy: number;
+  gamesPlayed: number;
+  lastPlayed: number;
+}
+
+// Get global leaderboard from Redis
+async function getGlobalLeaderboard(): Promise<LeaderboardEntry[]> {
+  try {
+    const leaderboardData = await redis.get(LEADERBOARD_KEY);
+    const leaderboard = leaderboardData ? JSON.parse(leaderboardData) : [];
+    return leaderboard.sort((a: LeaderboardEntry, b: LeaderboardEntry) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.accuracy - a.accuracy;
+    });
+  } catch (error) {
+    console.error('Error fetching global leaderboard:', error);
+    return [];
+  }
+}
+
+// Update player score in global leaderboard
+async function updatePlayerScore(username: string, gameScore: number, correctAnswers: number, totalQuestions: number): Promise<void> {
+  try {
+    // Fetch current leaderboard
+    const leaderboard = await getGlobalLeaderboard();
+    
+    // Calculate accuracy
+    const accuracy = Math.round((correctAnswers / totalQuestions) * 100);
+    
+    // Check if player already exists
+    const existingPlayer = leaderboard.find(p => p.username === username);
+    
+    if (existingPlayer) {
+      // Update existing player - only keep best score
+      if (gameScore > existingPlayer.score) {
+        existingPlayer.score = gameScore;
+        existingPlayer.accuracy = accuracy;
+      }
+      existingPlayer.gamesPlayed += 1;
+      existingPlayer.lastPlayed = Date.now();
+    } else {
+      // Add new player
+      leaderboard.push({
+        username,
+        score: gameScore,
+        accuracy,
+        gamesPlayed: 1,
+        lastPlayed: Date.now()
+      });
+    }
+    
+    // Keep only top 100 players to prevent unlimited growth
+    const sortedLeaderboard = leaderboard
+      .sort((a: LeaderboardEntry, b: LeaderboardEntry) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.accuracy - a.accuracy;
+      })
+      .slice(0, 100);
+    
+    // Save back to Redis
+    await redis.set(LEADERBOARD_KEY, JSON.stringify(sortedLeaderboard));
+  } catch (error) {
+    console.error('Error updating player score:', error);
+    throw error;
+  }
+}
+
+// Get player rank and stats
+async function getPlayerRank(username: string): Promise<{ rank: number; entry: LeaderboardEntry | null; totalPlayers: number }> {
+  try {
+    const leaderboard = await getGlobalLeaderboard();
+    const playerIndex = leaderboard.findIndex(p => p.username === username);
+    
+    return {
+      rank: playerIndex >= 0 ? playerIndex + 1 : -1,
+      entry: playerIndex >= 0 ? (leaderboard[playerIndex] || null) : null,
+      totalPlayers: leaderboard.length
+    };
+  } catch (error) {
+    console.error('Error getting player rank:', error);
+    return { rank: -1, entry: null, totalPlayers: 0 };
+  }
+}
+
+// Clear global leaderboard (moderators only)
+async function clearGlobalLeaderboard(): Promise<void> {
+  try {
+    await redis.set(LEADERBOARD_KEY, JSON.stringify([]));
+  } catch (error) {
+    console.error('Error clearing global leaderboard:', error);
+    throw error;
+  }
+}
+
+// Get leaderboard statistics
+async function getLeaderboardStats(): Promise<{ totalPlayers: number; totalGames: number; averageScore: number; topScore: number }> {
+  try {
+    const leaderboard = await getGlobalLeaderboard();
+    
+    if (leaderboard.length === 0) {
+      return { totalPlayers: 0, totalGames: 0, averageScore: 0, topScore: 0 };
+    }
+    
+    const totalGames = leaderboard.reduce((sum, player) => sum + player.gamesPlayed, 0);
+    const totalScore = leaderboard.reduce((sum, player) => sum + player.score, 0);
+    const averageScore = Math.round(totalScore / leaderboard.length);
+    const topScore = Math.max(...leaderboard.map(p => p.score));
+    
+    return {
+      totalPlayers: leaderboard.length,
+      totalGames,
+      averageScore,
+      topScore
+    };
+  } catch (error) {
+    console.error('Error getting leaderboard stats:', error);
+    return { totalPlayers: 0, totalGames: 0, averageScore: 0, topScore: 0 };
+  }
+}
+
+// Check if user is moderator
+async function checkIsModerator(): Promise<boolean> {
+  try {
+    const { subredditName } = context;
+    
+    if (!subredditName) {
+      return false;
+    }
+
+    // Get current user
+    const currentUser = await reddit.getCurrentUsername();
+    
+    if (!currentUser) {
+      return false;
+    }
+
+    // Get subreddit and check moderators
+    const subreddit = await reddit.getSubredditById(context.subredditId);
+    if (!subreddit) {
+      return false;
+    }
+    
+    const moderators = reddit.getModerators({ subredditName: subreddit.name });
+    
+    // Check if current user is a moderator
+    const moderatorList = await moderators.all();
+    return moderatorList.some((mod: any) => mod.username === currentUser);
+  } catch (error) {
+    console.error('Error checking moderator status:', error);
+    return false;
+  }
+}
+
 const router = express.Router();
 
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
@@ -91,8 +251,8 @@ router.post<{ postId: string }, DecrementResponse | { status: string; message: s
   }
 );
 
-// New leaderboard endpoints using KV store
-router.post('/api/submit-answer', async (req, res): Promise<void> => {
+// Leaderboard endpoints (matching your specification)
+router.post('/submit-answer', async (req, res): Promise<void> => {
   try {
     const { username, correct } = req.body;
     
@@ -135,26 +295,330 @@ router.post('/api/submit-answer', async (req, res): Promise<void> => {
   }
 });
 
-router.get('/api/leaderboard-kv', async (_req, res): Promise<void> => {
+// Submit game score to global leaderboard
+router.post('/api/submit-game-score', async (req, res): Promise<void> => {
   try {
-    // Get leaderboard from Redis
-    const leaderboardData = await redis.get('global_leaderboard');
-    const leaderboard = leaderboardData ? JSON.parse(leaderboardData) : {};
+    const { username, gameScore, correctAnswers, totalQuestions } = req.body;
     
-    // Sort by score and get top 10
-    const sorted = Object.entries(leaderboard)
-      .sort(([, a], [, b]) => (b as any).score - (a as any).score)
-      .slice(0, 10);
+    if (!username || gameScore === undefined || correctAnswers === undefined || totalQuestions === undefined) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: username, gameScore, correctAnswers, totalQuestions',
+      });
+      return;
+    }
+
+    // Update the global leaderboard
+    await updatePlayerScore(username, gameScore, correctAnswers, totalQuestions);
+    
+    // Get the player's new rank
+    const playerRank = await getPlayerRank(username);
     
     res.json({
-      topPlayers: sorted,
+      success: true,
+      playerRank: playerRank.rank,
+      playerEntry: playerRank.entry,
+      totalPlayers: playerRank.totalPlayers,
     });
   } catch (error) {
-    console.error('Error fetching KV leaderboard:', error);
+    console.error('Error submitting game score:', error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to fetch leaderboard',
-      topPlayers: [],
+      success: false,
+      error: 'Failed to submit game score',
+    });
+  }
+});
+
+// Get global leaderboard
+router.get('/leaderboard', async (_req, res): Promise<void> => {
+  try {
+    // Get global leaderboard
+    const leaderboard = await getGlobalLeaderboard();
+    
+    // Get leaderboard stats
+    const stats = await getLeaderboardStats();
+    
+    res.json({
+      success: true,
+      leaderboard: leaderboard.slice(0, 50), // Top 50 players
+      stats,
+    });
+  } catch (error) {
+    console.error('Error fetching global leaderboard:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch leaderboard',
+      leaderboard: [],
+      stats: {
+        totalPlayers: 0,
+        totalGames: 0,
+        averageScore: 0,
+        topScore: 0
+      }
+    });
+  }
+});
+
+// Check if current user is a moderator
+router.get('/is-moderator', async (_req, res): Promise<void> => {
+  try {
+    // Get current user
+    const currentUser = await reddit.getCurrentUsername();
+    
+    if (!currentUser) {
+      res.json({
+        success: false,
+        isModerator: false,
+        error: 'User not authenticated',
+      });
+      return;
+    }
+
+    // Check if user is moderator
+    const isModerator = await checkIsModerator();
+    
+    res.json({
+      success: true,
+      isModerator,
+      username: currentUser,
+    });
+  } catch (error) {
+    console.error('Error checking moderator status:', error);
+    res.status(500).json({
+      success: false,
+      isModerator: false,
+      error: 'Failed to check moderator status',
+    });
+  }
+});
+
+// Get balanced questions with duplicate prevention
+router.get('/api/balanced-questions', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.query;
+    
+    if (!sessionId) {
+      res.status(400).json({
+        success: false,
+        error: 'Session ID is required',
+      });
+      return;
+    }
+
+    // Get used questions for this session
+    const usedQuestionsKey = `used_questions:${sessionId}`;
+    const usedQuestionsData = await redis.get(usedQuestionsKey);
+    const usedQuestions = new Set(usedQuestionsData ? JSON.parse(usedQuestionsData) : []);
+
+    // Also track globally used fake posts to prevent repetition across all players
+    const globalUsedFakePostsKey = 'global_used_fake_posts';
+    const globalUsedFakePostsData = await redis.get(globalUsedFakePostsKey);
+    const globalUsedFakePosts = new Set(globalUsedFakePostsData ? JSON.parse(globalUsedFakePostsData) : []);
+
+    // Define available subreddits with balanced truth/troll distribution
+    const subreddits = [
+      // Truth sources (real Reddit posts)
+      { name: 'AskReddit', type: 'truth' },
+      { name: 'todayilearned', type: 'truth' },
+      { name: 'mildlyinteresting', type: 'truth' },
+      { name: 'showerthoughts', type: 'truth' },
+      { name: 'explainlikeimfive', type: 'truth' },
+      { name: 'science', type: 'truth' },
+      { name: 'history', type: 'truth' },
+      { name: 'technology', type: 'truth' },
+      // Troll sources (AI-generated fake posts)
+      { name: 'AskReddit_fake', type: 'troll' },
+      { name: 'todayilearned_fake', type: 'troll' },
+      { name: 'mildlyinteresting_fake', type: 'troll' },
+      { name: 'showerthoughts_fake', type: 'troll' },
+      { name: 'explainlikeimfive_fake', type: 'troll' },
+      { name: 'science_fake', type: 'troll' },
+      { name: 'history_fake', type: 'troll' },
+      { name: 'technology_fake', type: 'troll' }
+    ];
+
+    // Separate truth and troll questions
+    const truthSources = subreddits.filter(sub => sub.type === 'truth');
+    const trollSources = subreddits.filter(sub => sub.type === 'troll');
+    
+    // Filter unused questions by type
+    const availableTruth = truthSources.filter(sub => !usedQuestions.has(sub.name));
+    const availableTroll = trollSources.filter(sub => !usedQuestions.has(sub.name));
+    
+    // Check if we need to reset the pool (when either type is exhausted)
+    if (availableTruth.length === 0 || availableTroll.length === 0) {
+      console.log(`🔄 Question pool refreshed for session ${sessionId} - maintaining truth/troll balance`);
+      await redis.del(usedQuestionsKey);
+      usedQuestions.clear();
+      availableTruth.push(...truthSources);
+      availableTroll.push(...trollSources);
+    }
+
+    // Get session balance info
+    const balanceKey = `balance:${sessionId}`;
+    const balanceData = await redis.get(balanceKey);
+    const balance = balanceData ? JSON.parse(balanceData) : { truth: 0, troll: 0 };
+    
+    // Determine which type to select (maintain 50/50 balance)
+    let selectedType: 'truth' | 'troll';
+    if (balance.truth === balance.troll) {
+      // Equal counts, choose randomly
+      selectedType = Math.random() < 0.5 ? 'truth' : 'troll';
+    } else if (balance.truth < balance.troll) {
+      // Need more truth questions
+      selectedType = 'truth';
+    } else {
+      // Need more troll questions
+      selectedType = 'troll';
+    }
+    
+    // Select from appropriate pool
+    const selectedPool = selectedType === 'truth' ? availableTruth : availableTroll;
+    const selectedSubreddit = selectedPool[Math.floor(Math.random() * selectedPool.length)];
+    
+    if (!selectedSubreddit) {
+      // Fallback if no subreddit available
+      res.json({
+        success: true,
+        subreddit: 'AskReddit',
+        usedCount: 0,
+        totalAvailable: subreddits.length,
+        poolRefreshed: false
+      });
+      return;
+    }
+    
+    // Mark this subreddit as used and update balance
+    usedQuestions.add(selectedSubreddit.name);
+    balance[selectedType]++;
+    
+    // Save updated tracking data
+    await Promise.all([
+      redis.set(usedQuestionsKey, JSON.stringify([...usedQuestions])),
+      redis.set(balanceKey, JSON.stringify(balance))
+    ]);
+    
+    // Set expiration for session data (24 hours)
+    await Promise.all([
+      redis.expire(usedQuestionsKey, 86400),
+      redis.expire(balanceKey, 86400)
+    ]);
+
+    // Return the base subreddit name (without _fake suffix for troll questions)
+    const baseSubreddit = selectedSubreddit.name.replace('_fake', '');
+
+    res.json({
+      success: true,
+      subreddit: baseSubreddit,
+      questionType: selectedType,
+      usedCount: usedQuestions.size,
+      totalAvailable: subreddits.length,
+      balance: balance,
+      poolRefreshed: (availableTruth.length === truthSources.length && availableTroll.length === trollSources.length),
+      globalUsedFakePosts: globalUsedFakePosts.size
+    });
+
+  } catch (error) {
+    console.error('Error getting balanced questions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get balanced questions',
+      subreddit: 'AskReddit' // Fallback
+    });
+  }
+});
+
+// Track fake post usage globally
+router.post('/api/track-fake-post', async (req, res): Promise<void> => {
+  try {
+    const { postId } = req.body;
+    
+    if (!postId) {
+      res.status(400).json({
+        success: false,
+        error: 'Post ID is required',
+      });
+      return;
+    }
+
+    const globalUsedFakePostsKey = 'global_used_fake_posts';
+    const globalUsedFakePostsData = await redis.get(globalUsedFakePostsKey);
+    const globalUsedFakePosts = new Set(globalUsedFakePostsData ? JSON.parse(globalUsedFakePostsData) : []);
+    
+    // Add the post ID to used posts
+    globalUsedFakePosts.add(postId);
+    
+    // Save back to Redis with expiration (reset weekly to allow variety)
+    await redis.set(globalUsedFakePostsKey, JSON.stringify([...globalUsedFakePosts]));
+    await redis.expire(globalUsedFakePostsKey, 604800); // 7 days
+    
+    res.json({
+      success: true,
+      totalUsedPosts: globalUsedFakePosts.size
+    });
+
+  } catch (error) {
+    console.error('Error tracking fake post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to track fake post'
+    });
+  }
+});
+
+// Get fake post usage statistics
+router.get('/api/fake-post-stats', async (_req, res): Promise<void> => {
+  try {
+    const globalUsedFakePostsKey = 'global_used_fake_posts';
+    const globalUsedFakePostsData = await redis.get(globalUsedFakePostsKey);
+    const globalUsedFakePosts = new Set(globalUsedFakePostsData ? JSON.parse(globalUsedFakePostsData) : []);
+    
+    // Estimate total available fake posts (this would be the count from kiroService.ts)
+    const estimatedTotalFakePosts = 25; // Update this based on actual count
+    
+    res.json({
+      success: true,
+      usedPosts: globalUsedFakePosts.size,
+      totalPosts: estimatedTotalFakePosts,
+      availablePosts: estimatedTotalFakePosts - globalUsedFakePosts.size,
+      usagePercentage: Math.round((globalUsedFakePosts.size / estimatedTotalFakePosts) * 100)
+    });
+
+  } catch (error) {
+    console.error('Error getting fake post stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get fake post statistics'
+    });
+  }
+});
+
+// Reset leaderboard (moderators only)
+router.post('/reset-leaderboard', async (_req, res): Promise<void> => {
+  try {
+    // Check if user is moderator
+    const isModerator = await checkIsModerator();
+    
+    if (!isModerator) {
+      res.status(403).json({
+        success: false,
+        error: 'Access denied. Only moderators can reset the leaderboard.',
+      });
+      return;
+    }
+
+    // Reset the global leaderboard
+    await clearGlobalLeaderboard();
+    
+    res.json({
+      success: true,
+      message: 'Leaderboard has been reset successfully!',
+    });
+  } catch (error) {
+    console.error('Error resetting leaderboard:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset leaderboard',
     });
   }
 });

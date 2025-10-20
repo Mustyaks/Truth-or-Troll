@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 
 interface SplashScreenProps {
-  onPlayClick: (username: string) => void;
+  onPlayClick: () => void;
+  username: string;
 }
 
-export const SplashScreen = ({ onPlayClick }: SplashScreenProps) => {
-  const [username, setUsername] = useState('');
-  const [showUsernameInput, setShowUsernameInput] = useState(false);
+export const SplashScreen = ({ onPlayClick, username }: SplashScreenProps) => {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -16,17 +15,7 @@ export const SplashScreen = ({ onPlayClick }: SplashScreenProps) => {
   }, []);
 
   const handlePlayClick = () => {
-    setShowUsernameInput(true);
-  };
-
-  const handleStartGame = () => {
-    onPlayClick(username);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleStartGame();
-    }
+    onPlayClick();
   };
 
   return (
@@ -55,10 +44,10 @@ export const SplashScreen = ({ onPlayClick }: SplashScreenProps) => {
           </p>
         </div>
         
-        {!showUsernameInput ? (
-          <div className={`space-y-6 transition-all duration-1000 delay-500 ${
-            isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
-          }`}>
+        <div className={`space-y-6 transition-all duration-1000 delay-500 ${
+          isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
+        }`}>
+          <div className="space-y-4">
             <button
               onClick={handlePlayClick}
               className="group bg-white text-orange-600 px-8 sm:px-12 py-3 sm:py-4 rounded-full text-lg sm:text-xl font-bold hover:bg-gray-100 transition-all duration-300 shadow-2xl transform hover:scale-105 hover:shadow-orange-500/25 active:scale-95 relative overflow-hidden"
@@ -67,71 +56,34 @@ export const SplashScreen = ({ onPlayClick }: SplashScreenProps) => {
               <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-red-400 opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
             </button>
             
-            <p className="text-sm sm:text-base opacity-75 max-w-md mx-auto leading-relaxed px-4">
-              Test your ability to distinguish real Reddit posts from AI-generated fakes. 
-              How many can you get right?
-            </p>
-
-            {/* Feature highlights */}
-            <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-8 text-xs sm:text-sm opacity-80">
-              <div className="flex items-center space-x-2">
-                <span className="text-yellow-300">⚡</span>
-                <span>Real Reddit Posts</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-yellow-300">🤖</span>
-                <span>AI Generated Fakes</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-yellow-300">🏆</span>
-                <span>Global Leaderboard</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6 max-w-md mx-auto animate-fadeIn">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 sm:p-8 space-y-6 border border-white/20 shadow-2xl">
-              <div className="text-center space-y-2">
-                <h2 className="text-2xl sm:text-3xl font-bold">Join the Game</h2>
-                <p className="text-sm sm:text-base opacity-90">
-                  Your score will be saved to the leaderboard
-                </p>
-              </div>
-              
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Enter username (optional)"
-                  className="w-full px-4 py-3 sm:py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50 transition-all duration-200 text-base sm:text-lg"
-                  maxLength={20}
-                  autoFocus
-                />
-                
-                <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-                  <button
-                    onClick={handleStartGame}
-                    className="flex-1 bg-white text-orange-600 py-3 sm:py-4 px-6 rounded-xl font-bold hover:bg-gray-100 transition-all duration-200 transform hover:scale-105 shadow-lg"
-                  >
-                    Start Game
-                  </button>
-                  <button
-                    onClick={() => setShowUsernameInput(false)}
-                    className="px-6 py-3 sm:py-4 rounded-xl border-2 border-white/30 hover:bg-white/10 transition-all duration-200 font-medium"
-                  >
-                    Back
-                  </button>
-                </div>
-              </div>
-              
-              <p className="text-xs sm:text-sm opacity-70 text-center">
-                Leave blank to play as "Anonymous"
+            {username && username !== 'Anonymous' && (
+              <p className="text-sm sm:text-base opacity-90 font-medium">
+                Welcome, u/{username}!
               </p>
+            )}
+          </div>
+          
+          <p className="text-sm sm:text-base opacity-75 max-w-md mx-auto leading-relaxed px-4">
+            Test your ability to distinguish real Reddit posts from AI-generated fakes. 
+            How many can you get right?
+          </p>
+
+          {/* Feature highlights */}
+          <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-8 text-xs sm:text-sm opacity-80">
+            <div className="flex items-center space-x-2">
+              <span className="text-yellow-300">⚡</span>
+              <span>Real Reddit Posts</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-yellow-300">🤖</span>
+              <span>AI Generated Fakes</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-yellow-300">🏆</span>
+              <span>Global Leaderboard</span>
             </div>
           </div>
-        )}
+        </div>
       </div>
       
       <div className={`absolute bottom-4 sm:bottom-8 left-1/2 transform -translate-x-1/2 text-center transition-all duration-1000 delay-700 ${

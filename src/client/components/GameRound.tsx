@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { generateFakePost, fetchRealPost } from '../../shared/kiroService';
-import { submitAnswer } from '../../shared/apiService';
+import { submitAnswer, getBalancedQuestion, trackFakePost } from '../../shared/apiService';
 
 interface Post {
   id: string;
@@ -13,9 +13,10 @@ interface Post {
 }
 
 interface GameRoundProps {
-  onGameComplete: (finalScore: number) => void;
+  onGameComplete: (finalScore: number, correctAnswers: number) => void;
   onViewLeaderboard: () => void;
   username: string;
+  onAnswerSubmitted?: () => void;
 }
 
 type FeedbackState = {
@@ -82,14 +83,14 @@ const allMockPosts: Post[] = [
   }
 ];
 
-const PostCard = ({ 
-  post, 
-  onVote, 
-  disabled, 
-  selectedVote, 
-  showResult 
-}: { 
-  post: Post; 
+const PostCard = ({
+  post,
+  onVote,
+  disabled,
+  selectedVote,
+  showResult
+}: {
+  post: Post;
   onVote: (postId: string, vote: 'real' | 'fake') => void;
   disabled: boolean;
   selectedVote?: 'real' | 'fake' | undefined;
@@ -99,12 +100,12 @@ const PostCard = ({
     if (!showResult) {
       // Normal state
       if (buttonType === 'real') {
-        return disabled 
-          ? 'bg-gray-400 cursor-not-allowed' 
+        return disabled
+          ? 'bg-gray-400 cursor-not-allowed'
           : 'bg-green-500 hover:bg-green-600 hover:shadow-lg hover:shadow-green-500/25 transform hover:scale-105';
       } else {
-        return disabled 
-          ? 'bg-gray-400 cursor-not-allowed' 
+        return disabled
+          ? 'bg-gray-400 cursor-not-allowed'
           : 'bg-red-500 hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/25 transform hover:scale-105';
       }
     }
@@ -123,9 +124,8 @@ const PostCard = ({
   };
 
   return (
-    <div className={`bg-white rounded-xl shadow-lg border border-gray-100 p-5 sm:p-6 space-y-4 transition-all duration-300 hover:shadow-xl hover:shadow-gray-200/50 hover:-translate-y-1 ${
-      showResult ? 'transform scale-105 shadow-2xl' : ''
-    } group`}>
+    <div className={`bg-white rounded-xl shadow-lg border border-gray-100 p-5 sm:p-6 space-y-4 transition-all duration-300 hover:shadow-xl hover:shadow-gray-200/50 hover:-translate-y-1 ${showResult ? 'transform scale-105 shadow-2xl' : ''
+      } group`}>
       {/* Reddit-style header */}
       <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500">
         <div className="flex items-center space-x-1">
@@ -144,19 +144,19 @@ const PostCard = ({
           <span className="font-medium text-gray-600">{post.upvotes.toLocaleString()}</span>
         </div>
       </div>
-      
+
       {/* Post title */}
       <h3 className="font-semibold text-base sm:text-lg text-gray-900 leading-tight group-hover:text-gray-800 transition-colors">
         {post.title}
       </h3>
-      
+
       {/* Post body */}
       <div className="bg-gray-50 rounded-lg p-3 sm:p-4 border-l-4 border-gray-200">
         <p className="text-gray-700 text-sm sm:text-base leading-relaxed">
           {post.body}
         </p>
       </div>
-      
+
       {/* Voting buttons */}
       <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-2">
         <button
@@ -188,9 +188,8 @@ const PostCard = ({
       {/* Result indicator */}
       {showResult && (
         <div className="text-center pt-3 animate-fadeIn">
-          <span className={`inline-flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-semibold ${
-            post.isReal ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
-          }`}>
+          <span className={`inline-flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-semibold ${post.isReal ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
+            }`}>
             {post.isReal ? (
               <>
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -213,66 +212,137 @@ const PostCard = ({
   );
 };
 
-export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameRoundProps) => {
+export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswerSubmitted }: GameRoundProps) => {
   const [currentRound, setCurrentRound] = useState(1);
   const [score, setScore] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
   const [currentPosts, setCurrentPosts] = useState<Post[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState>({ show: false, isCorrect: false, message: '' });
   const [votingDisabled, setVotingDisabled] = useState(false);
   const [selectedVote, setSelectedVote] = useState<{ postId: string; vote: 'real' | 'fake' } | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  const [questionPoolStatus, setQuestionPoolStatus] = useState<{
+    used: number;
+    total: number;
+    refreshed: boolean;
+    balance: { truth: number; troll: number };
+    questionType: 'truth' | 'troll';
+  }>({
+    used: 0,
+    total: 16,
+    refreshed: false,
+    balance: { truth: 0, troll: 0 },
+    questionType: 'truth'
+  });
 
-  // Generate random posts for current round
+  // Generate balanced posts for current round with duplicate prevention
   const generateRoundPosts = async (): Promise<Post[]> => {
     try {
-      // Popular subreddits for diverse content
-      const subreddits = ['AskReddit', 'todayilearned', 'mildlyinteresting', 'showerthoughts', 'explainlikeimfive'];
-      const selectedSubreddit = subreddits[Math.floor(Math.random() * subreddits.length)] || 'AskReddit';
-      
-      // Fetch real post and generate fake post in parallel
+      // Get balanced question selection from server
+      const questionResponse = await getBalancedQuestion(sessionId);
+
+      if (!questionResponse.success) {
+        console.warn('Failed to get balanced question, using fallback');
+      }
+
+      // Update question pool status
+      setQuestionPoolStatus({
+        used: questionResponse.usedCount,
+        total: questionResponse.totalAvailable,
+        refreshed: questionResponse.poolRefreshed,
+        balance: questionResponse.balance,
+        questionType: questionResponse.questionType
+      });
+
+      // Log pool refresh
+      if (questionResponse.poolRefreshed) {
+        console.log('🔄 Question pool has been refreshed - starting fresh cycle');
+      }
+
+      const selectedSubreddit = questionResponse.subreddit;
+      const questionType = questionResponse.questionType;
+
+      // Generate both real and fake posts, but mark the correct one based on server selection
       const [realPostData, fakePostData] = await Promise.all([
         fetchRealPost(selectedSubreddit),
         generateFakePost(selectedSubreddit.toLowerCase())
       ]);
-      
-      const realPost: Post = {
-        id: `real-${realPostData.id}`,
-        title: realPostData.title,
-        body: realPostData.body,
-        subreddit: realPostData.subreddit,
-        author: realPostData.author,
-        upvotes: realPostData.upvotes,
-        isReal: true
-      };
-      
-      const fakePost: Post = {
-        id: `fake-${currentRound}-${Date.now()}`,
-        title: fakePostData.title,
-        body: fakePostData.body,
-        subreddit: fakePostData.subreddit,
-        author: fakePostData.author,
-        upvotes: fakePostData.upvotes,
-        isReal: false
-      };
-      
-      // Randomly shuffle the order
-      return Math.random() > 0.5 ? [realPost, fakePost] : [fakePost, realPost];
-      
+
+      // Track the fake post usage to prevent duplicates across all players
+      if (fakePostData.id) {
+        try {
+          await trackFakePost(fakePostData.id);
+        } catch (error) {
+          console.error('Failed to track fake post usage:', error);
+        }
+      }
+
+      // Create posts with correct truth/troll assignment
+      let truthPost: Post, trollPost: Post;
+
+      if (questionType === 'truth') {
+        // This round should feature a real post as the "truth"
+        truthPost = {
+          id: `real-${realPostData.id}`,
+          title: realPostData.title,
+          body: realPostData.body,
+          subreddit: realPostData.subreddit,
+          author: realPostData.author,
+          upvotes: realPostData.upvotes,
+          isReal: true
+        };
+
+        trollPost = {
+          id: `fake-${currentRound}-${Date.now()}`,
+          title: fakePostData.title,
+          body: fakePostData.body,
+          subreddit: fakePostData.subreddit,
+          author: fakePostData.author,
+          upvotes: fakePostData.upvotes,
+          isReal: false
+        };
+      } else {
+        // This round should feature a fake post as the "troll"
+        truthPost = {
+          id: `real-${realPostData.id}`,
+          title: realPostData.title,
+          body: realPostData.body,
+          subreddit: realPostData.subreddit,
+          author: realPostData.author,
+          upvotes: realPostData.upvotes,
+          isReal: true
+        };
+
+        trollPost = {
+          id: `fake-${currentRound}-${Date.now()}`,
+          title: fakePostData.title,
+          body: fakePostData.body,
+          subreddit: fakePostData.subreddit,
+          author: fakePostData.author,
+          upvotes: fakePostData.upvotes,
+          isReal: false
+        };
+      }
+
+      // Always return one real and one fake post, randomly shuffled
+      return Math.random() > 0.5 ? [truthPost, trollPost] : [trollPost, truthPost];
+
     } catch (error) {
       console.error('Failed to fetch/generate posts:', error);
-      
+
       // Fallback to static mock posts if both API calls fail
       const realPosts = allMockPosts.filter(post => post.isReal);
       const fakePosts = allMockPosts.filter(post => !post.isReal);
-      
+
       if (realPosts.length === 0 || fakePosts.length === 0) {
         return allMockPosts.slice(0, 2);
       }
-      
+
       const randomReal = realPosts[Math.floor(Math.random() * realPosts.length)]!;
       const randomFake = fakePosts[Math.floor(Math.random() * fakePosts.length)]!;
-      
+
       return Math.random() > 0.5 ? [randomReal, randomFake] : [randomFake, randomReal];
     }
   };
@@ -301,8 +371,11 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
     // Check if vote is correct
     const isCorrect = (vote === 'real' && post.isReal) || (vote === 'fake' && !post.isReal);
     const points = isCorrect ? 100 : 0;
-    
+
     setScore(prev => prev + points);
+    if (isCorrect) {
+      setCorrectAnswers(prev => prev + 1);
+    }
     setFeedback({
       show: true,
       isCorrect,
@@ -312,6 +385,8 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
     // Submit answer to leaderboard
     try {
       await submitAnswer(username, isCorrect);
+      // Notify parent that answer was submitted (for leaderboard refresh)
+      onAnswerSubmitted?.();
     } catch (error) {
       console.error('Failed to submit answer to leaderboard:', error);
     }
@@ -319,7 +394,8 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
     // After 2 seconds, move to next round or end game
     setTimeout(async () => {
       if (currentRound >= 10) {
-        onGameComplete(score + points);
+        const finalCorrectAnswers = correctAnswers + (isCorrect ? 1 : 0);
+        onGameComplete(score + points, finalCorrectAnswers);
       } else {
         // Next round
         setLoading(true);
@@ -369,11 +445,10 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
 
         {/* Feedback Message */}
         {feedback.show && (
-          <div className={`mb-6 p-4 rounded-lg text-center font-bold text-xl transition-all duration-500 transform ${
-            feedback.isCorrect 
-              ? 'bg-green-100 text-green-800 border border-green-300' 
-              : 'bg-red-100 text-red-800 border border-red-300'
-          } animate-pulse`}>
+          <div className={`mb-6 p-4 rounded-lg text-center font-bold text-xl transition-all duration-500 transform ${feedback.isCorrect
+            ? 'bg-green-100 text-green-800 border border-green-300'
+            : 'bg-red-100 text-red-800 border border-red-300'
+            } animate-pulse`}>
             {feedback.message}
             {feedback.isCorrect && <span className="block text-sm mt-1">+100 points!</span>}
           </div>
@@ -382,16 +457,31 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
         {/* Instructions */}
         {!feedback.show && !loading && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <p className="text-blue-800 text-center font-medium">
-              One post is real from Reddit, one is AI-generated. Can you tell which is which?
-            </p>
+            <div className="text-center space-y-2">
+              <p className="text-blue-800 font-medium">
+                One post is real from Reddit, one is AI-generated. Can you tell which is which?
+              </p>
+              <div className="flex items-center justify-center space-x-4 text-xs text-blue-600">
+                <span>📊 Questions: {questionPoolStatus.used}/{questionPoolStatus.total}</span>
+                <span>⚖️ Balance: {questionPoolStatus.balance.truth}T / {questionPoolStatus.balance.troll}F</span>
+                <span className={`px-2 py-1 rounded-full ${questionPoolStatus.questionType === 'truth'
+                  ? 'bg-green-100 text-green-600'
+                  : 'bg-red-100 text-red-600'
+                  }`}>
+                  {questionPoolStatus.questionType === 'truth' ? '✓ Truth Round' : '✗ Troll Round'}
+                </span>
+                {questionPoolStatus.refreshed && (
+                  <span className="bg-blue-100 px-2 py-1 rounded-full">🔄 Pool refreshed!</span>
+                )}
+              </div>
+            </div>
           </div>
         )}
-        
+
         {loading && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
             <p className="text-orange-800 text-center font-medium">
-              🔄 Fetching fresh posts from Reddit...
+              🔄 Fetching balanced questions from Reddit...
             </p>
           </div>
         )}
@@ -422,9 +512,9 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
         ) : (
           <div className="grid md:grid-cols-2 gap-6">
             {currentPosts.map((post) => (
-              <PostCard 
-                key={`${post.id}-${currentRound}`} 
-                post={post} 
+              <PostCard
+                key={`${post.id}-${currentRound}`}
+                post={post}
                 onVote={handleVote}
                 disabled={votingDisabled}
                 selectedVote={selectedVote?.postId === post.id ? selectedVote.vote : undefined}
@@ -440,11 +530,10 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username }: GameR
             {[...Array(10)].map((_, i) => (
               <div
                 key={i}
-                className={`w-3 h-3 rounded-full transition-colors duration-300 ${
-                  i < currentRound - 1 ? 'bg-orange-500' : 
-                  i === currentRound - 1 ? 'bg-orange-400 animate-pulse' : 
-                  'bg-gray-300'
-                }`}
+                className={`w-3 h-3 rounded-full transition-colors duration-300 ${i < currentRound - 1 ? 'bg-orange-500' :
+                  i === currentRound - 1 ? 'bg-orange-400 animate-pulse' :
+                    'bg-gray-300'
+                  }`}
               />
             ))}
           </div>
