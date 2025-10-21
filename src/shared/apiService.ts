@@ -65,7 +65,7 @@ export async function submitAnswer(username: string, correct: boolean): Promise<
 
 export async function getLeaderboard(): Promise<LeaderboardResponse> {
   try {
-    const response = await fetch('/leaderboard');
+    const response = await fetch('/api/global-leaderboard');
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -140,7 +140,7 @@ export interface ResetLeaderboardResponse {
 
 export async function checkModeratorStatus(): Promise<ModeratorCheckResponse> {
   try {
-    const response = await fetch('/is-moderator');
+    const response = await fetch('/api/is-moderator');
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -159,7 +159,7 @@ export async function checkModeratorStatus(): Promise<ModeratorCheckResponse> {
 
 export async function resetLeaderboard(): Promise<ResetLeaderboardResponse> {
   try {
-    const response = await fetch('/reset-leaderboard', {
+    const response = await fetch('/api/reset-leaderboard', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

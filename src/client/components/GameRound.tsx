@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { generateFakePost, fetchRealPost } from '../../shared/kiroService';
-import { submitAnswer, getBalancedQuestion, trackFakePost } from '../../shared/apiService';
+import { getBalancedQuestion, trackFakePost } from '../../shared/apiService';
 
 interface Post {
   id: string;
@@ -382,14 +382,8 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
       message: isCorrect ? 'Correct! 🎉' : 'Oops! 😅'
     });
 
-    // Submit answer to leaderboard
-    try {
-      await submitAnswer(username, isCorrect);
-      // Notify parent that answer was submitted (for leaderboard refresh)
-      onAnswerSubmitted?.();
-    } catch (error) {
-      console.error('Failed to submit answer to leaderboard:', error);
-    }
+    // No per-answer submissions; leaderboard updates after session ends
+    onAnswerSubmitted?.();
 
     // After 2 seconds, move to next round or end game
     setTimeout(async () => {
@@ -414,6 +408,7 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-3 sm:p-4">
       <div className="max-w-7xl mx-auto">
+        <div className="max-h-[700px] overflow-y-auto scroll-smooth pr-2">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 bg-white rounded-xl shadow-lg border border-gray-100 p-4 sm:p-6 space-y-4 sm:space-y-0">
           <div className="space-y-1">
@@ -538,6 +533,7 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
             ))}
           </div>
           <p className="text-sm text-gray-600 mt-2">Round {currentRound} of 10</p>
+        </div>
         </div>
       </div>
     </div>

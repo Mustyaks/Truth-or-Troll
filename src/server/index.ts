@@ -24,11 +24,28 @@ interface LeaderboardEntry {
   lastPlayed: number;
 }
 
-// Get global leaderboard from Redis
+// Get global leaderboard from Redis (robust to legacy shapes)
 async function getGlobalLeaderboard(): Promise<LeaderboardEntry[]> {
   try {
     const leaderboardData = await redis.get(LEADERBOARD_KEY);
-    const leaderboard = leaderboardData ? JSON.parse(leaderboardData) : [];
+    const parsed = leaderboardData ? JSON.parse(leaderboardData) : [];
+
+    // Normalize to array shape if legacy object shape is encountered
+    let leaderboard: LeaderboardEntry[] = Array.isArray(parsed)
+      ? parsed
+      : Object.entries(parsed || {}).map(([username, value]: [string, any]) => {
+          const plays = typeof value?.plays === 'number' ? value.plays : 0;
+          const score = typeof value?.score === 'number' ? value.score : 0;
+          const accuracy = plays > 0 ? Math.round((score / plays) * 100) : 0;
+          return {
+            username,
+            score,
+            accuracy,
+            gamesPlayed: plays,
+            lastPlayed: Date.now()
+          } as LeaderboardEntry;
+        });
+
     return leaderboard.sort((a: LeaderboardEntry, b: LeaderboardEntry) => {
       if (b.score !== a.score) return b.score - a.score;
       return b.accuracy - a.accuracy;
@@ -70,15 +87,14 @@ async function updatePlayerScore(username: string, gameScore: number, correctAns
       });
     }
     
-    // Keep only top 100 players to prevent unlimited growth
+    // Sort leaderboard by score, then accuracy
     const sortedLeaderboard = leaderboard
       .sort((a: LeaderboardEntry, b: LeaderboardEntry) => {
         if (b.score !== a.score) return b.score - a.score;
         return b.accuracy - a.accuracy;
-      })
-      .slice(0, 100);
-    
-    // Save back to Redis
+      });
+
+    // Save back to Redis (persist all players who have played)
     await redis.set(LEADERBOARD_KEY, JSON.stringify(sortedLeaderboard));
   } catch (error) {
     console.error('Error updating player score:', error);
@@ -332,7 +348,7 @@ router.post('/api/submit-game-score', async (req, res): Promise<void> => {
 // Get global leaderboard
 router.get('/leaderboard', async (_req, res): Promise<void> => {
   try {
-    // Get global leaderboard
+    // Get global leaderboard (all players)
     const leaderboard = await getGlobalLeaderboard();
     
     // Get leaderboard stats
@@ -340,7 +356,7 @@ router.get('/leaderboard', async (_req, res): Promise<void> => {
     
     res.json({
       success: true,
-      leaderboard: leaderboard.slice(0, 50), // Top 50 players
+      leaderboard,
       stats,
     });
   } catch (error) {
@@ -355,6 +371,23 @@ router.get('/leaderboard', async (_req, res): Promise<void> => {
         averageScore: 0,
         topScore: 0
       }
+    });
+  }
+});
+
+// API-prefixed global leaderboard for client access
+router.get('/api/global-leaderboard', async (_req, res): Promise<void> => {
+  try {
+    const leaderboard = await getGlobalLeaderboard();
+    const stats = await getLeaderboardStats();
+    res.json({ success: true, leaderboard, stats });
+  } catch (error) {
+    console.error('Error fetching global leaderboard (api):', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch leaderboard',
+      leaderboard: [],
+      stats: { totalPlayers: 0, totalGames: 0, averageScore: 0, topScore: 0 }
     });
   }
 });
@@ -389,6 +422,22 @@ router.get('/is-moderator', async (_req, res): Promise<void> => {
       isModerator: false,
       error: 'Failed to check moderator status',
     });
+  }
+});
+
+// API-prefixed moderator check
+router.get('/api/is-moderator', async (_req, res): Promise<void> => {
+  try {
+    const currentUser = await reddit.getCurrentUsername();
+    if (!currentUser) {
+      res.json({ success: false, isModerator: false, error: 'User not authenticated' });
+      return;
+    }
+    const isModerator = await checkIsModerator();
+    res.json({ success: true, isModerator, username: currentUser });
+  } catch (error) {
+    console.error('Error checking moderator status (api):', error);
+    res.status(500).json({ success: false, isModerator: false, error: 'Failed to check moderator status' });
   }
 });
 
@@ -620,6 +669,22 @@ router.post('/reset-leaderboard', async (_req, res): Promise<void> => {
       success: false,
       error: 'Failed to reset leaderboard',
     });
+  }
+});
+
+// API-prefixed reset leaderboard
+router.post('/api/reset-leaderboard', async (_req, res): Promise<void> => {
+  try {
+    const isModerator = await checkIsModerator();
+    if (!isModerator) {
+      res.status(403).json({ success: false, error: 'Access denied. Only moderators can reset the leaderboard.' });
+      return;
+    }
+    await clearGlobalLeaderboard();
+    res.json({ success: true, message: 'Leaderboard has been reset successfully!' });
+  } catch (error) {
+    console.error('Error resetting leaderboard (api):', error);
+    res.status(500).json({ success: false, error: 'Failed to reset leaderboard' });
   }
 });
 

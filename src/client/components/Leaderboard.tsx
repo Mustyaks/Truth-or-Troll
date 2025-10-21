@@ -6,27 +6,6 @@ import {
   type GlobalLeaderboardEntry
 } from '../../shared/apiService';
 
-// Local leaderboard types and functions
-interface LeaderboardEntry {
-  username: string;
-  score: number;
-  accuracy: number;
-  timestamp: number;
-}
-
-const getLeaderboard = (): LeaderboardEntry[] => {
-  try {
-    const stored = localStorage.getItem('leaderboard');
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-const clearLeaderboard = (): void => {
-  localStorage.removeItem('leaderboard');
-};
-
 interface LeaderboardProps {
   onPlayAgain: () => void;
   onBackToSplash: () => void;
@@ -48,7 +27,7 @@ const LeaderboardRow = ({
   rank,
   isCurrentUser = false
 }: {
-  entry: LeaderboardEntry;
+  entry: { username: string; score: number; accuracy: number; timestamp: number };
   rank: number;
   isCurrentUser?: boolean;
 }) => (
@@ -103,7 +82,6 @@ const LeaderboardRow = ({
 );
 
 export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, currentUsername }: LeaderboardProps) => {
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalLeaderboardEntry[]>([]);
   const [leaderboardStats, setLeaderboardStats] = useState({
     totalPlayers: 0,
@@ -111,8 +89,6 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
     averageScore: 0,
     topScore: 0
   });
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [showGlobalLeaderboard, setShowGlobalLeaderboard] = useState(true);
   const [isModerator, setIsModerator] = useState(false);
   const [showModResetConfirm, setShowModResetConfirm] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
@@ -125,18 +101,13 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
         setLeaderboardStats(response.stats);
       } else {
         console.error('Failed to fetch global leaderboard:', response.error);
-        setShowGlobalLeaderboard(false);
       }
     } catch (error) {
       console.error('Failed to fetch global leaderboard:', error);
-      setShowGlobalLeaderboard(false);
     }
   };
 
   useEffect(() => {
-    // Load both leaderboards
-    setLeaderboard(getLeaderboard());
-
     // Fetch global leaderboard from server
     fetchGlobalLeaderboard();
 
@@ -153,16 +124,10 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
     checkModerator();
 
     // Set up periodic refresh for real-time updates
-    const interval = setInterval(fetchGlobalLeaderboard, 15000); // Refresh every 15 seconds
+    const interval = setInterval(fetchGlobalLeaderboard, 15000);
 
     return () => clearInterval(interval);
   }, []);
-
-  const handleClearLeaderboard = () => {
-    clearLeaderboard();
-    setLeaderboard([]);
-    setShowClearConfirm(false);
-  };
 
   const handleModeratorReset = async () => {
     setResetLoading(true);
@@ -170,7 +135,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
       const result = await resetServerLeaderboard();
 
       if (result.success) {
-        // Clear both leaderboards
+        // Clear leaderboard
         setGlobalLeaderboard([]);
         setLeaderboardStats({
           totalPlayers: 0,
@@ -178,8 +143,6 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
           averageScore: 0,
           topScore: 0
         });
-        clearLeaderboard();
-        setLeaderboard([]);
 
         // Show success message
         alert(result.message || 'Global leaderboard has been reset successfully!');
@@ -195,15 +158,15 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
     }
   };
 
-  const isCurrentUserEntry = (entry: LeaderboardEntry, _index: number) => {
-    if (!currentUsername || !currentUserScore) return false;
-    return entry.username.toLowerCase() === currentUsername.toLowerCase() &&
-      entry.score === currentUserScore;
+  const isCurrentUserEntry = (entry: { username: string; score: number }, _index: number) => {
+    if (!currentUsername || currentUserScore === undefined) return false;
+    return entry.username.toLowerCase() === currentUsername.toLowerCase() && entry.score === currentUserScore;
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-3 sm:p-4">
       <div className="max-w-5xl mx-auto">
+        <div className="max-h-[700px] overflow-y-auto scroll-smooth pr-2">
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8 space-y-2">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 flex items-center justify-center space-x-3">
@@ -214,7 +177,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
         </div>
 
         {/* Global Stats Display */}
-        {showGlobalLeaderboard && leaderboardStats.totalPlayers > 0 && (
+        {leaderboardStats.totalPlayers > 0 && (
           <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-600 text-white rounded-xl shadow-2xl p-4 sm:p-6 mb-6 sm:mb-8 relative overflow-hidden">
             <div className="absolute inset-0 bg-white/10 backdrop-blur-sm"></div>
             <div className="relative z-10">
@@ -270,10 +233,10 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
               <div>
                 <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center space-x-2">
                   <span className="text-orange-500">📊</span>
-                  <span>{showGlobalLeaderboard ? 'Global Leaderboard' : 'Local Game Scores'}</span>
+                  <span>Global Leaderboard</span>
                 </h3>
                 <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                  {showGlobalLeaderboard ? 'Shared across all players - persists between sessions' : 'Your local browser scores only'}
+                  Shared across all players - persists between sessions
                 </p>
               </div>
               <div className="flex space-x-2">
@@ -285,12 +248,6 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                     <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                   </svg>
                   <span>Refresh</span>
-                </button>
-                <button
-                  onClick={() => setShowGlobalLeaderboard(!showGlobalLeaderboard)}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
-                >
-                  Switch View
                 </button>
               </div>
             </div>
@@ -315,9 +272,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {showGlobalLeaderboard ? (
-                  // Global Leaderboard (Persistent across all players)
-                  globalLeaderboard.length > 0 ? (
+                {globalLeaderboard.length > 0 ? (
                     globalLeaderboard.map((entry, index) => (
                       <tr key={entry.username} className={`group transition-all duration-200 ${entry.username.toLowerCase() === currentUsername?.toLowerCase()
                         ? 'bg-gradient-to-r from-orange-50 to-red-50 border-l-4 border-orange-400'
@@ -346,7 +301,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                                 </span>
                               )}
                               <div className="text-xs text-gray-500 mt-1">
-                                {entry.gamesPlayed} games • {new Date(entry.lastPlayed).toLocaleDateString()}
+                                {entry.gamesPlayed} games • {new Date(entry.lastPlayed).toLocaleString()}
                               </div>
                             </div>
                           </div>
@@ -382,28 +337,6 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                         </div>
                       </td>
                     </tr>
-                  )
-                ) : (
-                  // Original localStorage Leaderboard (Game-based)
-                  leaderboard.length > 0 ? (
-                    leaderboard.slice(0, 10).map((entry, index) => (
-                      <LeaderboardRow
-                        key={`${entry.username}-${entry.timestamp}`}
-                        entry={entry}
-                        rank={index + 1}
-                        isCurrentUser={isCurrentUserEntry(entry, index)}
-                      />
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                        <div className="space-y-2">
-                          <p className="text-lg">🎯 No game scores yet!</p>
-                          <p className="text-sm">Complete a full game to see scores here.</p>
-                        </div>
-                      </td>
-                    </tr>
-                  )
                 )}
               </tbody>
             </table>
@@ -432,7 +365,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
           </button>
 
           {/* Moderator Reset Button */}
-          {isModerator && (globalLeaderboard.length > 0 || leaderboard.length > 0) && (
+          {isModerator && globalLeaderboard.length > 0 && (
             <button
               onClick={() => setShowModResetConfirm(true)}
               disabled={resetLoading}
@@ -445,53 +378,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
             </button>
           )}
 
-          {/* Local Clear Button */}
-          {leaderboard.length > 0 && (
-            <button
-              onClick={() => setShowClearConfirm(true)}
-              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-4 sm:px-6 py-3 rounded-xl font-medium text-sm sm:text-base transition-all duration-200 transform hover:scale-105 hover:shadow-lg hover:shadow-red-500/25 flex items-center justify-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v4a1 1 0 11-2 0V7zM12 7a1 1 0 112 0v4a1 1 0 11-2 0V7z" clipRule="evenodd" />
-              </svg>
-              <span>Clear Local Scores</span>
-            </button>
-          )}
         </div>
-
-        {/* Local Clear Confirmation Modal */}
-        {showClearConfirm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-            <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full space-y-6 shadow-2xl border border-gray-100 transform animate-scaleIn">
-              <div className="text-center space-y-3">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-                  <svg className="w-8 h-8 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Clear Local Scores?</h3>
-                <p className="text-gray-600 text-sm sm:text-base">
-                  This will clear your local game scores only. Server leaderboard will remain intact.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-                <button
-                  onClick={handleClearLeaderboard}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
-                >
-                  Clear Local Scores
-                </button>
-                <button
-                  onClick={() => setShowClearConfirm(false)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-4 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Moderator Reset Confirmation Modal */}
         {showModResetConfirm && (
@@ -563,6 +450,7 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
         {/* Stats Footer */}
         <div className="mt-8 text-center text-gray-500 text-sm">
           <p>Rankings update in real-time • Challenge your friends to beat your score!</p>
+        </div>
         </div>
       </div>
     </div>

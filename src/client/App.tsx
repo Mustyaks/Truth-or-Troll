@@ -2,29 +2,6 @@ import { useState, useEffect } from 'react';
 import { SplashScreen } from './components/SplashScreen';
 import { GameRound } from './components/GameRound';
 import { Leaderboard } from './components/Leaderboard';
-// Local leaderboard function
-const addScore = (username: string, score: number, totalQuestions: number) => {
-  try {
-    const leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
-    const accuracy = Math.round((score / (totalQuestions * 100)) * 100);
-
-    leaderboard.push({
-      username,
-      score,
-      accuracy,
-      timestamp: Date.now()
-    });
-
-    // Keep only the latest 50 scores
-    const sortedLeaderboard = leaderboard
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 50);
-
-    localStorage.setItem('leaderboard', JSON.stringify(sortedLeaderboard));
-  } catch (error) {
-    console.error('Error saving score to local leaderboard:', error);
-  }
-};
 import { submitGameScore } from '../shared/apiService';
 
 type Screen = 'splash' | 'game' | 'leaderboard';
@@ -73,9 +50,6 @@ export const App = () => {
 
   const handleGameComplete = async (finalScore: number, correctCount: number) => {
     setGameScore(finalScore);
-
-    // Save score to both local and global leaderboards
-    addScore(username, finalScore, totalQuestions);
 
     try {
       // Submit to global leaderboard
