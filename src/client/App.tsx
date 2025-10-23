@@ -11,6 +11,7 @@ export const App = () => {
   const [gameScore, setGameScore] = useState<number | undefined>();
   const [username, setUsername] = useState<string>('');
   const [leaderboardKey, setLeaderboardKey] = useState(0);
+  const [gameSessionKey, setGameSessionKey] = useState(0);
 
   const [totalQuestions] = useState(10);
   useEffect(() => {
@@ -44,8 +45,10 @@ export const App = () => {
   }, []);
 
   const handlePlayClick = () => {
+    console.log('🎮 Starting new game session - forcing fresh Truth post fetch');
     setCurrentScreen('game');
     setGameScore(undefined);
+    setGameSessionKey(prev => prev + 1); // Force GameRound component remount
   };
 
   const handleGameComplete = async (finalScore: number, correctCount: number) => {
@@ -67,8 +70,10 @@ export const App = () => {
   };
 
   const handlePlayAgain = () => {
+    console.log('🔄 Starting new game session (Play Again) - forcing fresh Truth post fetch');
     setCurrentScreen('game');
     setGameScore(undefined);
+    setGameSessionKey(prev => prev + 1); // Force GameRound component remount
   };
 
   const handleBackToSplash = () => {
@@ -87,6 +92,7 @@ export const App = () => {
     case 'game':
       return (
         <GameRound
+          key={gameSessionKey}
           onGameComplete={handleGameComplete}
           onViewLeaderboard={handleViewLeaderboard}
           username={username}

@@ -245,6 +245,102 @@ export async function trackFakePost(postId: string): Promise<{ success: boolean;
   }
 }
 
+// Track truth post usage to prevent repetition across sessions
+export async function trackTruthPost(postId: string, subreddit?: string): Promise<{ success: boolean; totalUsedPosts?: number; error?: string }> {
+  try {
+    const response = await fetch('/api/track-truth-post', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ postId, subreddit }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error tracking truth post:', error);
+    return {
+      success: false,
+      error: 'Failed to track truth post'
+    };
+  }
+}
+
+// Get recently used truth posts for filtering (session-specific)
+export async function getRecentTruthPosts(sessionId: string): Promise<{
+  success: boolean;
+  recentPosts?: string[];
+  totalTracked?: number;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`/api/recent-truth-posts?sessionId=${encodeURIComponent(sessionId)}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error getting recent truth posts:', error);
+    return {
+      success: false,
+      recentPosts: [],
+      error: 'Failed to get recent truth posts'
+    };
+  }
+}
+
+// Fetch fresh truth posts directly from Reddit API via backend
+export async function fetchFreshTruthPost(subreddit: string, sessionId: string): Promise<{
+  success: boolean;
+  post?: {
+    id: string;
+    title: string;
+    body: string;
+    subreddit: string;
+    author: string;
+    upvotes: number;
+  };
+  strategy?: number;
+  totalAvailable?: number;
+  sessionUsedCount?: number;
+  error?: string;
+}> {
+  try {
+    console.log('🌐 [CLIENT] Requesting fresh truth post from backend for r/', subreddit, 'session:', sessionId);
+    
+    const response = await fetch(`/api/fetch-fresh-truth-posts?subreddit=${encodeURIComponent(subreddit)}&sessionId=${encodeURIComponent(sessionId)}`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log('✅ [CLIENT] Received fresh truth post from backend:', {
+        id: result.post.id,
+        title: result.post.title.substring(0, 60) + '...',
+        strategy: result.strategy,
+        totalAvailable: result.totalAvailable
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error('❌ [CLIENT] Error fetching fresh truth post:', error);
+    return {
+      success: false,
+      error: 'Failed to fetch fresh truth post from backend'
+    };
+  }
+}
+
 // Get fake post usage statistics
 export async function getFakePostStats(): Promise<{
   success: boolean;

@@ -527,11 +527,45 @@ export async function fetchRealPost(subreddit: string): Promise<{
   id: string;
 }> {
   try {
-    const response = await fetch(`https://www.reddit.com/r/${subreddit}/top.json?limit=50`);
+    console.log('🌐 Fetching fresh Truth posts from Reddit API for r/', subreddit);
     
-    if (!response.ok) {
-      throw new Error(`Failed to fetch from Reddit: ${response.status}`);
+    // First, get recently used truth posts to avoid repetition
+    const recentPostsResponse = await fetch('/api/recent-truth-posts');
+    let recentPosts: string[] = [];
+    
+    if (recentPostsResponse.ok) {
+      const recentData = await recentPostsResponse.json();
+      recentPosts = recentData.recentPosts || [];
+      console.log('📋 Found', recentPosts.length, 'recently used Truth posts to avoid');
     }
+
+    // Try multiple strategies for maximum freshness
+    const strategies = [
+      `https://www.reddit.com/r/${subreddit}/top.json?limit=50`,
+      `https://www.reddit.com/r/${subreddit}/hot.json?limit=50`,
+      `https://www.reddit.com/r/all/top.json?limit=100&t=day` // Fallback to r/all
+    ];
+
+    let response: Response;
+    let usedStrategy = 0;
+
+    for (let i = 0; i < strategies.length; i++) {
+      console.log('🔗 Making fresh Reddit API call to:', strategies[i]);
+      response = await fetch(strategies[i]);
+      
+      if (response.ok) {
+        usedStrategy = i;
+        break;
+      } else {
+        console.warn(`Strategy ${i} failed with status:`, response.status);
+      }
+    }
+
+    if (!response || !response.ok) {
+      throw new Error(`Failed to fetch from Reddit with all strategies`);
+    }
+    
+    console.log('✅ Successfully fetched from strategy', usedStrategy, ':', strategies[usedStrategy]);
     
     const data: RedditResponse = await response.json();
     
@@ -539,24 +573,59 @@ export async function fetchRealPost(subreddit: string): Promise<{
       throw new Error('No posts found in subreddit');
     }
     
-    // Filter out posts without selftext (text posts only)
+    // Filter out posts without selftext (text posts only) and recently used posts
     const textPosts = data.data.children.filter(post => 
+      post.data.selftext && 
+      post.data.selftext.trim().length > 50 && 
+      !post.data.selftext.includes('[removed]') &&
+      !post.data.selftext.includes('[deleted]') &&
+      !recentPosts.includes(post.data.id) // Exclude recently used posts
+    );
+    
+    // If all posts are recently used, fall back to all text posts
+    const availablePosts = textPosts.length > 0 ? textPosts : data.data.children.filter(post => 
       post.data.selftext && 
       post.data.selftext.trim().length > 50 && 
       !post.data.selftext.includes('[removed]') &&
       !post.data.selftext.includes('[deleted]')
     );
     
-    if (textPosts.length === 0) {
+    if (availablePosts.length === 0) {
       throw new Error('No suitable text posts found');
     }
     
-    // Randomly select a post
-    const randomPost = textPosts[Math.floor(Math.random() * textPosts.length)];
+    // Randomly select a post from available posts
+    const randomPost = availablePosts[Math.floor(Math.random() * availablePosts.length)];
     if (!randomPost) {
       throw new Error('Failed to select a random post');
     }
     const postData = randomPost.data;
+    
+    console.log('✅ Selected fresh Truth post:', {
+      id: postData.id,
+      title: postData.title.substring(0, 60) + '...',
+      subreddit: postData.subreddit,
+      author: postData.author,
+      upvotes: postData.ups
+    });
+    
+    // Track this truth post usage
+    try {
+      await fetch('/api/track-truth-post', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          postId: postData.id, 
+          subreddit: postData.subreddit 
+        }),
+      });
+      console.log('📝 Tracked Truth post usage for ID:', postData.id);
+    } catch (trackingError) {
+      console.warn('Failed to track truth post usage:', trackingError);
+      // Don't fail the whole operation if tracking fails
+    }
     
     return {
       title: postData.title,

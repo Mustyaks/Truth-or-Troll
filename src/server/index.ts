@@ -465,8 +465,9 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
     const globalUsedFakePosts = new Set(globalUsedFakePostsData ? JSON.parse(globalUsedFakePostsData) : []);
 
     // Define available subreddits with balanced truth/troll distribution
+    // Expanded list for more variety and freshness
     const subreddits = [
-      // Truth sources (real Reddit posts)
+      // Truth sources (real Reddit posts) - expanded for variety
       { name: 'AskReddit', type: 'truth' },
       { name: 'todayilearned', type: 'truth' },
       { name: 'mildlyinteresting', type: 'truth' },
@@ -475,6 +476,14 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
       { name: 'science', type: 'truth' },
       { name: 'history', type: 'truth' },
       { name: 'technology', type: 'truth' },
+      { name: 'unpopularopinion', type: 'truth' },
+      { name: 'AmItheAsshole', type: 'truth' },
+      { name: 'relationship_advice', type: 'truth' },
+      { name: 'LifeProTips', type: 'truth' },
+      { name: 'YouShouldKnow', type: 'truth' },
+      { name: 'NoStupidQuestions', type: 'truth' },
+      { name: 'OutOfTheLoop', type: 'truth' },
+      { name: 'changemyview', type: 'truth' },
       // Troll sources (AI-generated fake posts)
       { name: 'AskReddit_fake', type: 'troll' },
       { name: 'todayilearned_fake', type: 'troll' },
@@ -483,7 +492,15 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
       { name: 'explainlikeimfive_fake', type: 'troll' },
       { name: 'science_fake', type: 'troll' },
       { name: 'history_fake', type: 'troll' },
-      { name: 'technology_fake', type: 'troll' }
+      { name: 'technology_fake', type: 'troll' },
+      { name: 'unpopularopinion_fake', type: 'troll' },
+      { name: 'AmItheAsshole_fake', type: 'troll' },
+      { name: 'relationship_advice_fake', type: 'troll' },
+      { name: 'LifeProTips_fake', type: 'troll' },
+      { name: 'YouShouldKnow_fake', type: 'troll' },
+      { name: 'NoStupidQuestions_fake', type: 'troll' },
+      { name: 'OutOfTheLoop_fake', type: 'troll' },
+      { name: 'changemyview_fake', type: 'troll' }
     ];
 
     // Separate truth and troll questions
@@ -611,6 +628,224 @@ router.post('/api/track-fake-post', async (req, res): Promise<void> => {
     res.status(500).json({
       success: false,
       error: 'Failed to track fake post'
+    });
+  }
+});
+
+// Track truth post usage globally to prevent repetition across sessions
+router.post('/api/track-truth-post', async (req, res): Promise<void> => {
+  try {
+    const { postId, subreddit } = req.body;
+    
+    if (!postId) {
+      res.status(400).json({
+        success: false,
+        error: 'Post ID is required',
+      });
+      return;
+    }
+
+    // Track truth posts with timestamps for session-based memory
+    const globalUsedTruthPostsKey = 'global_used_truth_posts';
+    const globalUsedTruthPostsData = await redis.get(globalUsedTruthPostsKey);
+    const globalUsedTruthPosts = globalUsedTruthPostsData ? JSON.parse(globalUsedTruthPostsData) : {};
+    
+    // Add the post ID with timestamp and subreddit
+    globalUsedTruthPosts[postId] = {
+      timestamp: Date.now(),
+      subreddit: subreddit || 'unknown'
+    };
+    
+    // Clean up old entries (older than 5 sessions worth of time - approximately 1 hour)
+    const fiveHoursAgo = Date.now() - (5 * 60 * 60 * 1000);
+    Object.keys(globalUsedTruthPosts).forEach(key => {
+      if (globalUsedTruthPosts[key].timestamp < fiveHoursAgo) {
+        delete globalUsedTruthPosts[key];
+      }
+    });
+    
+    // Save back to Redis with expiration (reset daily to allow variety)
+    await redis.set(globalUsedTruthPostsKey, JSON.stringify(globalUsedTruthPosts));
+    await redis.expire(globalUsedTruthPostsKey, 86400); // 24 hours
+    
+    res.json({
+      success: true,
+      totalUsedPosts: Object.keys(globalUsedTruthPosts).length
+    });
+
+  } catch (error) {
+    console.error('Error tracking truth post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to track truth post'
+    });
+  }
+});
+
+// Get recently used truth posts for filtering (session-based only)
+router.get('/api/recent-truth-posts', async (req, res): Promise<void> => {
+  try {
+    const { sessionId } = req.query;
+    
+    if (!sessionId) {
+      res.status(400).json({
+        success: false,
+        error: 'Session ID is required',
+        recentPosts: []
+      });
+      return;
+    }
+
+    // Get session-specific used truth posts (not global)
+    const sessionUsedTruthPostsKey = `session_used_truth_posts:${sessionId}`;
+    const sessionUsedTruthPostsData = await redis.get(sessionUsedTruthPostsKey);
+    const sessionUsedTruthPosts = sessionUsedTruthPostsData ? JSON.parse(sessionUsedTruthPostsData) : {};
+    
+    // Return only post IDs used in this specific session
+    const recentPosts = Object.keys(sessionUsedTruthPosts);
+    
+    console.log(`📋 Session ${sessionId} has used ${recentPosts.length} truth posts`);
+    
+    res.json({
+      success: true,
+      recentPosts,
+      totalTracked: recentPosts.length
+    });
+
+  } catch (error) {
+    console.error('Error getting recent truth posts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get recent truth posts',
+      recentPosts: []
+    });
+  }
+});
+
+// Fetch fresh truth posts directly from Reddit API (backend-side)
+router.get('/api/fetch-fresh-truth-posts', async (req, res): Promise<void> => {
+  try {
+    const { subreddit, sessionId } = req.query;
+    
+    if (!subreddit || !sessionId) {
+      res.status(400).json({
+        success: false,
+        error: 'Subreddit and sessionId are required',
+      });
+      return;
+    }
+
+    console.log(`🌐 [SERVER] Fetching fresh truth posts from Reddit API for r/${subreddit} (session: ${sessionId})`);
+
+    // Get session-specific used posts to avoid duplicates within this session
+    const sessionUsedTruthPostsKey = `session_used_truth_posts:${sessionId}`;
+    const sessionUsedTruthPostsData = await redis.get(sessionUsedTruthPostsKey);
+    const sessionUsedTruthPosts = sessionUsedTruthPostsData ? JSON.parse(sessionUsedTruthPostsData) : {};
+
+    // Try multiple Reddit API strategies for maximum freshness
+    const strategies = [
+      `https://www.reddit.com/r/${subreddit}/new.json?limit=50`,
+      `https://www.reddit.com/r/${subreddit}/top.json?limit=50&t=day`,
+      `https://www.reddit.com/r/${subreddit}/hot.json?limit=50`,
+      `https://www.reddit.com/r/all/new.json?limit=100` // Fallback to r/all
+    ];
+
+    let response: Response;
+    let usedStrategy = 0;
+    let posts: any[] = [];
+
+    for (let i = 0; i < strategies.length; i++) {
+      const strategyUrl = strategies[i];
+      if (!strategyUrl) continue;
+      
+      console.log(`🔗 [SERVER] Making fresh Reddit API call to: ${strategyUrl}`);
+      response = await fetch(strategyUrl);
+      
+      if (response.ok) {
+        const data: any = await response.json();
+        posts = data.data?.children || [];
+        if (posts.length > 0) {
+          usedStrategy = i;
+          console.log(`✅ [SERVER] Successfully fetched ${posts.length} posts from strategy ${i}`);
+          break;
+        }
+      } else {
+        console.warn(`❌ [SERVER] Strategy ${i} failed with status:`, response.status);
+      }
+    }
+
+    if (posts.length === 0) {
+      throw new Error('No posts found from any Reddit API strategy');
+    }
+
+    // Filter out posts without selftext and session-used posts
+    const availablePosts = posts.filter(post => {
+      const postData = post.data;
+      return postData.selftext && 
+             postData.selftext.trim().length > 50 && 
+             !postData.selftext.includes('[removed]') &&
+             !postData.selftext.includes('[deleted]') &&
+             !sessionUsedTruthPosts[postData.id]; // Exclude session-used posts
+    });
+
+    // If all posts are used in this session, fall back to all available posts
+    const finalPosts = availablePosts.length > 0 ? availablePosts : posts.filter(post => {
+      const postData = post.data;
+      return postData.selftext && 
+             postData.selftext.trim().length > 50 && 
+             !postData.selftext.includes('[removed]') &&
+             !postData.selftext.includes('[deleted]');
+    });
+
+    if (finalPosts.length === 0) {
+      throw new Error('No suitable text posts found');
+    }
+
+    // Randomly select a fresh post
+    const randomPost = finalPosts[Math.floor(Math.random() * finalPosts.length)];
+    const postData = randomPost.data;
+
+    console.log(`🎯 [SERVER] Selected fresh truth post:`, {
+      id: postData.id,
+      title: postData.title.substring(0, 60) + '...',
+      subreddit: postData.subreddit,
+      author: postData.author,
+      upvotes: postData.ups,
+      strategy: usedStrategy
+    });
+
+    // Track this post as used in this session
+    sessionUsedTruthPosts[postData.id] = {
+      timestamp: Date.now(),
+      subreddit: postData.subreddit
+    };
+
+    // Save session-specific tracking
+    await redis.set(sessionUsedTruthPostsKey, JSON.stringify(sessionUsedTruthPosts));
+    await redis.expire(sessionUsedTruthPostsKey, 3600); // 1 hour expiration
+
+    res.json({
+      success: true,
+      post: {
+        id: postData.id,
+        title: postData.title,
+        body: postData.selftext.length > 300 
+          ? postData.selftext.substring(0, 300) + '...' 
+          : postData.selftext,
+        subreddit: postData.subreddit,
+        author: postData.author,
+        upvotes: postData.ups
+      },
+      strategy: usedStrategy,
+      totalAvailable: finalPosts.length,
+      sessionUsedCount: Object.keys(sessionUsedTruthPosts).length
+    });
+
+  } catch (error) {
+    console.error('❌ [SERVER] Error fetching fresh truth posts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch fresh truth posts from Reddit',
     });
   }
 });

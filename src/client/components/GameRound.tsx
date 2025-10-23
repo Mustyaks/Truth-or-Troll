@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { generateFakePost, fetchRealPost } from '../../shared/kiroService';
-import { getBalancedQuestion, trackFakePost } from '../../shared/apiService';
+import { generateFakePost } from '../../shared/kiroService';
+import { getBalancedQuestion, trackFakePost, fetchFreshTruthPost } from '../../shared/apiService';
 
 interface Post {
   id: string;
@@ -212,7 +212,7 @@ const PostCard = ({
   );
 };
 
-export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswerSubmitted }: GameRoundProps) => {
+export const GameRound = ({ onGameComplete, onViewLeaderboard, onAnswerSubmitted }: GameRoundProps) => {
   const [currentRound, setCurrentRound] = useState(1);
   const [score, setScore] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
@@ -240,6 +240,8 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
   // Generate balanced posts for current round with duplicate prevention
   const generateRoundPosts = async (): Promise<Post[]> => {
     try {
+      console.log('🎯 Generating fresh posts for round', currentRound, 'in session', sessionId);
+      
       // Get balanced question selection from server
       const questionResponse = await getBalancedQuestion(sessionId);
 
@@ -264,13 +266,21 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
       const selectedSubreddit = questionResponse.subreddit;
       const questionType = questionResponse.questionType;
 
-      // Generate both real and fake posts, but mark the correct one based on server selection
-      const [realPostData, fakePostData] = await Promise.all([
-        fetchRealPost(selectedSubreddit),
-        generateFakePost(selectedSubreddit.toLowerCase())
-      ]);
+      console.log('📡 Fetching fresh Truth post from backend API for r/', selectedSubreddit, 'and generating new Troll post');
+      
+      // Fetch fresh truth post from backend (which calls Reddit API directly)
+      const truthPostResponse = await fetchFreshTruthPost(selectedSubreddit, sessionId);
+      
+      if (!truthPostResponse.success || !truthPostResponse.post) {
+        throw new Error('Failed to fetch fresh truth post from backend');
+      }
+      
+      const realPostData = truthPostResponse.post;
+      
+      // Generate fake post
+      const fakePostData = await generateFakePost(selectedSubreddit.toLowerCase());
 
-      // Track the fake post usage to prevent duplicates across all players
+      // Track fake post usage to prevent duplicates across all players
       if (fakePostData.id) {
         try {
           await trackFakePost(fakePostData.id);
@@ -278,6 +288,13 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
           console.error('Failed to track fake post usage:', error);
         }
       }
+
+      console.log('🎯 Fresh posts generated:', {
+        truth: { id: realPostData.id, title: realPostData.title.substring(0, 50) + '...' },
+        troll: { id: fakePostData.id, title: fakePostData.title.substring(0, 50) + '...' },
+        strategy: truthPostResponse.strategy,
+        totalAvailable: truthPostResponse.totalAvailable
+      });
 
       // Create posts with correct truth/troll assignment
       let truthPost: Post, trollPost: Post;
@@ -347,16 +364,19 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
     }
   };
 
-  // Initialize first round
+  // Initialize first round - runs on every component mount (new game session)
   useEffect(() => {
     const initializeRound = async () => {
+      console.log('🔄 GameRound component mounted - fetching fresh Truth posts for new session');
+      console.log('📊 Session ID:', sessionId);
       setLoading(true);
       const posts = await generateRoundPosts();
+      console.log('✅ Fresh posts fetched for session:', posts.map(p => ({ id: p.id, title: p.title.substring(0, 50) + '...', isReal: p.isReal })));
       setCurrentPosts(posts);
       setLoading(false);
     };
     initializeRound();
-  }, []);
+  }, []); // Empty dependency array ensures this runs on every mount (new session)
 
   const handleVote = async (postId: string, vote: 'real' | 'fake') => {
     if (votingDisabled) return;
@@ -476,7 +496,10 @@ export const GameRound = ({ onGameComplete, onViewLeaderboard, username, onAnswe
         {loading && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
             <p className="text-orange-800 text-center font-medium">
-              🔄 Fetching balanced questions from Reddit...
+              🔄 Fetching fresh Truth posts from Reddit API via backend...
+            </p>
+            <p className="text-orange-600 text-center text-sm mt-2">
+              Each session gets completely unique content - no caching!
             </p>
           </div>
         )}
