@@ -22,65 +22,6 @@ const getRankIcon = (rank: number) => {
   }
 };
 
-const LeaderboardRow = ({
-  entry,
-  rank,
-  isCurrentUser = false
-}: {
-  entry: { username: string; score: number; accuracy: number; timestamp: number };
-  rank: number;
-  isCurrentUser?: boolean;
-}) => (
-  <tr className={`group transition-all duration-200 ${isCurrentUser
-    ? 'bg-gradient-to-r from-orange-50 to-red-50 border-l-4 border-orange-400'
-    : 'hover:bg-gray-50 hover:shadow-sm'
-    }`}>
-    <td className="px-3 sm:px-4 py-4 text-center">
-      <div className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full font-bold text-sm sm:text-base ${rank <= 3 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white shadow-lg' :
-        'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-        } transition-all duration-200`}>
-        {getRankIcon(rank)}
-      </div>
-    </td>
-    <td className="px-3 sm:px-4 py-4">
-      <div className="flex items-center space-x-2 sm:space-x-3">
-        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base ${isCurrentUser ? 'bg-gradient-to-br from-orange-500 to-red-500' : 'bg-gradient-to-br from-blue-500 to-purple-500'
-          }`}>
-          {entry.username.charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <span className={`font-semibold text-sm sm:text-base ${isCurrentUser ? 'text-orange-700' : 'text-gray-900'}`}>
-            {entry.username}
-          </span>
-          {isCurrentUser && (
-            <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-medium">
-              You
-            </span>
-          )}
-          <div className="text-xs text-gray-500 mt-1">
-            {new Date(entry.timestamp).toLocaleDateString()}
-          </div>
-        </div>
-      </div>
-    </td>
-    <td className="px-3 sm:px-4 py-4 text-center">
-      <div className="font-bold text-lg sm:text-xl text-gray-900">
-        {entry.score.toLocaleString()}
-      </div>
-      <div className="text-xs text-gray-500">points</div>
-    </td>
-    <td className="px-3 sm:px-4 py-4 text-center">
-      <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${entry.accuracy >= 90 ? 'bg-green-100 text-green-700 border border-green-200' :
-        entry.accuracy >= 80 ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
-          entry.accuracy >= 70 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-            'bg-red-100 text-red-700 border border-red-200'
-        }`}>
-        {entry.accuracy >= 90 ? '🔥' : entry.accuracy >= 80 ? '⚡' : entry.accuracy >= 70 ? '👍' : '💪'} {entry.accuracy}%
-      </span>
-    </td>
-  </tr>
-);
-
 export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, currentUsername }: LeaderboardProps) => {
   const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalLeaderboardEntry[]>([]);
   const [leaderboardStats, setLeaderboardStats] = useState({
@@ -92,6 +33,12 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
   const [isModerator, setIsModerator] = useState(false);
   const [showModResetConfirm, setShowModResetConfirm] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchGlobalLeaderboard = async () => {
     try {
@@ -144,23 +91,18 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
           topScore: 0
         });
 
-        // Show success message
-        alert(result.message || 'Global leaderboard has been reset successfully!');
+        // Show success toast
+        showToast('Leaderboard cleared successfully.', 'success');
       } else {
-        alert(result.error || 'Failed to reset leaderboard');
+        showToast('Failed to clear leaderboard. Please try again.', 'error');
       }
     } catch (error) {
       console.error('Error resetting leaderboard:', error);
-      alert('Failed to reset leaderboard');
+      showToast('Failed to clear leaderboard. Please try again.', 'error');
     } finally {
       setResetLoading(false);
       setShowModResetConfirm(false);
     }
-  };
-
-  const isCurrentUserEntry = (entry: { username: string; score: number }, _index: number) => {
-    if (!currentUsername || currentUserScore === undefined) return false;
-    return entry.username.toLowerCase() === currentUsername.toLowerCase() && entry.score === currentUserScore;
   };
 
   return (
@@ -249,6 +191,19 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                   </svg>
                   <span>Refresh</span>
                 </button>
+                {/* Moderator Clear Scores Button */}
+                {isModerator && globalLeaderboard.length > 0 && (
+                  <button
+                    onClick={() => setShowModResetConfirm(true)}
+                    disabled={resetLoading}
+                    className="bg-red-500 hover:bg-red-600 disabled:bg-red-400 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span>{resetLoading ? 'Clearing...' : 'Clear Scores'}</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -364,20 +319,6 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
             <span>Main Menu</span>
           </button>
 
-          {/* Moderator Reset Button */}
-          {isModerator && globalLeaderboard.length > 0 && (
-            <button
-              onClick={() => setShowModResetConfirm(true)}
-              disabled={resetLoading}
-              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 sm:px-6 py-3 rounded-xl font-medium text-sm sm:text-base transition-all duration-200 transform hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25 flex items-center justify-center space-x-2"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
-              </svg>
-              <span>{resetLoading ? 'Resetting...' : 'Reset All Scores'}</span>
-            </button>
-          )}
-
         </div>
 
         {/* Moderator Reset Confirmation Modal */}
@@ -390,9 +331,9 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                     <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
                   </svg>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">🛡️ Moderator Reset</h3>
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Clear Leaderboard</h3>
                 <p className="text-gray-600 text-sm sm:text-base">
-                  <strong>Warning:</strong> This will permanently delete ALL leaderboard data for everyone in this subreddit. This action cannot be undone.
+                  Are you sure you want to clear all leaderboard scores? This action cannot be undone.
                 </p>
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                   <p className="text-purple-800 text-xs font-medium">
@@ -412,10 +353,10 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      <span>Resetting...</span>
+                      <span>Clearing...</span>
                     </>
                   ) : (
-                    <span>Reset All Leaderboards</span>
+                    <span>Confirm</span>
                   )}
                 </button>
                 <button
@@ -453,6 +394,40 @@ export const Leaderboard = ({ onPlayAgain, onBackToSplash, currentUserScore, cur
         </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 animate-fadeIn">
+          <div className={`px-6 py-4 rounded-xl shadow-lg border-l-4 flex items-center space-x-3 ${
+            toast.type === 'success' 
+              ? 'bg-green-50 border-green-400 text-green-800' 
+              : 'bg-red-50 border-red-400 text-red-800'
+          }`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+              toast.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {toast.type === 'success' ? (
+                <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              )}
+            </div>
+            <span className="font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
