@@ -1,3 +1,4 @@
+💡 This project is submitted for the “Best Kiro Developer Experience” category. It demonstrates how Kiro can enhance rapid iteration, debugging, and component generation within Devvit Web.
 # Truth or Troll
 
 An interactive Reddit game that challenges players to distinguish between real Reddit posts and AI-generated fakes.
