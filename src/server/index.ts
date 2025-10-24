@@ -454,20 +454,14 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
       return;
     }
 
-    // Get used questions for this session
-    const usedQuestionsKey = `used_questions:${sessionId}`;
-    const usedQuestionsData = await redis.get(usedQuestionsKey);
-    const usedQuestions = new Set(usedQuestionsData ? JSON.parse(usedQuestionsData) : []);
-
-    // Also track globally used fake posts to prevent repetition across all players
-    const globalUsedFakePostsKey = 'global_used_fake_posts';
-    const globalUsedFakePostsData = await redis.get(globalUsedFakePostsKey);
-    const globalUsedFakePosts = new Set(globalUsedFakePostsData ? JSON.parse(globalUsedFakePostsData) : []);
+    // Track used posts by their actual IDs (not just subreddit names)
+    const usedPostsKey = `used_posts:${sessionId}`;
+    const usedPostsData = await redis.get(usedPostsKey);
+    const usedPosts = new Set(usedPostsData ? JSON.parse(usedPostsData) : []);
 
     // Define available subreddits with balanced truth/troll distribution
-    // Expanded list for more variety and freshness
     const subreddits = [
-      // Truth sources (real Reddit posts) - expanded for variety
+      // Truth sources (real Reddit posts)
       { name: 'AskReddit', type: 'truth' },
       { name: 'todayilearned', type: 'truth' },
       { name: 'mildlyinteresting', type: 'truth' },
@@ -485,40 +479,23 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
       { name: 'OutOfTheLoop', type: 'truth' },
       { name: 'changemyview', type: 'truth' },
       // Troll sources (AI-generated fake posts)
-      { name: 'AskReddit_fake', type: 'troll' },
-      { name: 'todayilearned_fake', type: 'troll' },
-      { name: 'mildlyinteresting_fake', type: 'troll' },
-      { name: 'showerthoughts_fake', type: 'troll' },
-      { name: 'explainlikeimfive_fake', type: 'troll' },
-      { name: 'science_fake', type: 'troll' },
-      { name: 'history_fake', type: 'troll' },
-      { name: 'technology_fake', type: 'troll' },
-      { name: 'unpopularopinion_fake', type: 'troll' },
-      { name: 'AmItheAsshole_fake', type: 'troll' },
-      { name: 'relationship_advice_fake', type: 'troll' },
-      { name: 'LifeProTips_fake', type: 'troll' },
-      { name: 'YouShouldKnow_fake', type: 'troll' },
-      { name: 'NoStupidQuestions_fake', type: 'troll' },
-      { name: 'OutOfTheLoop_fake', type: 'troll' },
-      { name: 'changemyview_fake', type: 'troll' }
+      { name: 'technology', type: 'troll' },
+      { name: 'pets', type: 'troll' },
+      { name: 'food', type: 'troll' },
+      { name: 'gaming', type: 'troll' },
+      { name: 'science', type: 'troll' },
+      { name: 'relationships', type: 'troll' },
+      { name: 'AskReddit', type: 'troll' },
+      { name: 'todayilearned', type: 'troll' },
+      { name: 'mildlyinteresting', type: 'troll' },
+      { name: 'showerthoughts', type: 'troll' },
+      { name: 'explainlikeimfive', type: 'troll' },
+      { name: 'history', type: 'troll' },
+      { name: 'unpopularopinion', type: 'troll' },
+      { name: 'AmItheAsshole', type: 'troll' },
+      { name: 'relationship_advice', type: 'troll' },
+      { name: 'LifeProTips', type: 'troll' }
     ];
-
-    // Separate truth and troll questions
-    const truthSources = subreddits.filter(sub => sub.type === 'truth');
-    const trollSources = subreddits.filter(sub => sub.type === 'troll');
-    
-    // Filter unused questions by type
-    const availableTruth = truthSources.filter(sub => !usedQuestions.has(sub.name));
-    const availableTroll = trollSources.filter(sub => !usedQuestions.has(sub.name));
-    
-    // Check if we need to reset the pool (when either type is exhausted)
-    if (availableTruth.length === 0 || availableTroll.length === 0) {
-      console.log(`🔄 Question pool refreshed for session ${sessionId} - maintaining truth/troll balance`);
-      await redis.del(usedQuestionsKey);
-      usedQuestions.clear();
-      availableTruth.push(...truthSources);
-      availableTroll.push(...trollSources);
-    }
 
     // Get session balance info
     const balanceKey = `balance:${sessionId}`;
@@ -539,49 +516,43 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
     }
     
     // Select from appropriate pool
-    const selectedPool = selectedType === 'truth' ? availableTruth : availableTroll;
-    const selectedSubreddit = selectedPool[Math.floor(Math.random() * selectedPool.length)];
+    const availableSubreddits = subreddits.filter(sub => sub.type === selectedType);
+    const selectedSubreddit = availableSubreddits[Math.floor(Math.random() * availableSubreddits.length)];
     
     if (!selectedSubreddit) {
       // Fallback if no subreddit available
       res.json({
         success: true,
         subreddit: 'AskReddit',
-        usedCount: 0,
+        questionType: 'truth' as 'truth' | 'troll',
+        usedCount: usedPosts.size,
         totalAvailable: subreddits.length,
+        balance: balance,
         poolRefreshed: false
       });
       return;
     }
     
-    // Mark this subreddit as used and update balance
-    usedQuestions.add(selectedSubreddit.name);
+    // Update balance
     balance[selectedType]++;
     
-    // Save updated tracking data
-    await Promise.all([
-      redis.set(usedQuestionsKey, JSON.stringify([...usedQuestions])),
-      redis.set(balanceKey, JSON.stringify(balance))
-    ]);
+    // Save updated balance
+    await redis.set(balanceKey, JSON.stringify(balance));
+    await redis.expire(balanceKey, 86400); // 24 hours
     
     // Set expiration for session data (24 hours)
-    await Promise.all([
-      redis.expire(usedQuestionsKey, 86400),
-      redis.expire(balanceKey, 86400)
-    ]);
+    await redis.expire(usedPostsKey, 86400);
 
-    // Return the base subreddit name (without _fake suffix for troll questions)
-    const baseSubreddit = selectedSubreddit.name.replace('_fake', '');
+    console.log(`🎯 Selected ${selectedType} question from r/${selectedSubreddit.name} for session ${sessionId}`);
 
     res.json({
       success: true,
-      subreddit: baseSubreddit,
+      subreddit: selectedSubreddit.name,
       questionType: selectedType,
-      usedCount: usedQuestions.size,
+      usedCount: usedPosts.size,
       totalAvailable: subreddits.length,
       balance: balance,
-      poolRefreshed: (availableTruth.length === truthSources.length && availableTroll.length === trollSources.length),
-      globalUsedFakePosts: globalUsedFakePosts.size
+      poolRefreshed: false
     });
 
   } catch (error) {
@@ -589,7 +560,54 @@ router.get('/api/balanced-questions', async (req, res): Promise<void> => {
     res.status(500).json({
       success: false,
       error: 'Failed to get balanced questions',
-      subreddit: 'AskReddit' // Fallback
+      subreddit: 'AskReddit',
+      questionType: 'truth' as 'truth' | 'troll',
+      usedCount: 0,
+      totalAvailable: 32,
+      balance: { truth: 0, troll: 0 },
+      poolRefreshed: false
+    });
+  }
+});
+
+// Track any post usage in session to prevent duplicates
+router.post('/api/track-post-usage', async (req, res): Promise<void> => {
+  try {
+    const { postId, sessionId, postType } = req.body;
+    
+    if (!postId || !sessionId) {
+      res.status(400).json({
+        success: false,
+        error: 'Post ID and session ID are required',
+      });
+      return;
+    }
+
+    // Track in session-specific used posts
+    const usedPostsKey = `used_posts:${sessionId}`;
+    const usedPostsData = await redis.get(usedPostsKey);
+    const usedPosts = new Set(usedPostsData ? JSON.parse(usedPostsData) : []);
+    
+    // Add the post ID to used posts for this session
+    usedPosts.add(postId);
+    
+    // Save back to Redis with expiration (24 hours)
+    await redis.set(usedPostsKey, JSON.stringify([...usedPosts]));
+    await redis.expire(usedPostsKey, 86400); // 24 hours
+    
+    console.log(`📝 Tracked ${postType || 'unknown'} post usage: ${postId} in session ${sessionId}`);
+    
+    res.json({
+      success: true,
+      totalUsedPosts: usedPosts.size,
+      sessionId: sessionId
+    });
+
+  } catch (error) {
+    console.error('Error tracking post usage:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to track post usage'
     });
   }
 });

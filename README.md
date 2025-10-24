@@ -1,62 +1,67 @@
 💡 This project is submitted for the “Best Kiro Developer Experience” category. It demonstrates how Kiro can enhance rapid iteration, debugging, and component generation within Devvit Web.
 # Truth or Troll
 
-An interactive Reddit game that challenges players to distinguish between real Reddit posts and AI-generated fakes.
+An interactive Reddit game that challenges players to distinguish between real Reddit posts and AI-generated fakes in a fast-paced 10-round format.
 
 ## What is Truth or Troll?
 
-Truth or Troll is a deception detection game built on Reddit's Devvit platform. Players are presented with pairs of Reddit posts in each round and must determine which ones are genuine content from real Reddit users versus cleverly crafted AI-generated content designed to fool them. The game tests your ability to spot subtle differences in writing style, content authenticity, and the telltale signs of AI-generated text across various subreddits like r/todayilearned, r/cats, r/mildlyinteresting, and more.
+Truth or Troll is a deception detection game built on Reddit's Devvit platform that presents players with **one post per round** - either a genuine Reddit post fetched live from the Reddit API or a carefully crafted AI-generated fake. Players must decide whether each post is "Real" or "Fake" across 10 challenging rounds. The game features a sophisticated balanced question system that ensures fair distribution between truth and troll rounds, with fresh content fetched for every game session.
 
-## What Makes This Game Unique
+## What Makes This Game Innovative
 
-- **Reddit-Native Experience**: Built directly into Reddit posts using Devvit, allowing seamless gameplay within the Reddit ecosystem without leaving the platform
-- **Real vs AI Challenge**: Tests players' ability to spot the subtle differences between authentic human-generated content and AI-generated posts in an era where AI content is becoming increasingly sophisticated
-- **Dynamic Round System**: Each of the 10 rounds presents two posts side-by-side - one real and one fake - with randomized selection from an expanding pool of content
-- **Instant Visual Feedback**: Immediate feedback after each vote with color-coded results showing correct answers, wrong selections, and point rewards
-- **Competitive Scoring System**: Features a 10-round game format with 100 points per correct answer, building competitive tension and encouraging accuracy
-- **Social Gaming**: Leverages Reddit's community aspect with global leaderboards, accuracy tracking, and the ability to challenge friends
-- **Educational Value**: Helps users develop critical thinking skills for identifying AI-generated content in the digital age - a crucial skill for modern internet literacy
-- **Mobile-First Design**: Optimized for mobile Reddit users with responsive design, touch-friendly interactions, and smooth animations
-- **Real-Time Leaderboards**: Global rankings with accuracy percentages and live score updates that encourage repeat play
+- **Live Reddit Integration**: Each "Truth" round features posts fetched directly from Reddit's API in real-time, ensuring completely fresh content that players have never seen before
+- **Balanced Question Algorithm**: Advanced backend system tracks question distribution to ensure fair 50/50 balance between real and fake posts across all players
+- **Session-Based Freshness**: Every new game session fetches completely unique content with no caching, preventing players from memorizing answers
+- **Sophisticated AI Detection Challenge**: Tests players' ability to identify subtle differences between authentic human writing and AI-generated content in an era of increasingly sophisticated AI
+- **Reddit-Native Experience**: Seamlessly integrated into Reddit posts using Devvit, allowing gameplay without leaving the platform
+- **Global Persistent Leaderboards**: Cross-session leaderboards that persist between games, with accuracy tracking and competitive rankings
+- **Moderator Controls**: Subreddit moderators can reset leaderboards and manage game state
+- **Mobile-Optimized Design**: Responsive interface designed for Reddit's mobile-first user base
+- **Real-Time Feedback System**: Instant visual feedback with animated results and scoring
 
 ## How to Play
 
 ### Getting Started
 
 1. **Launch the Game**: Click the "Play Now" button on the vibrant orange-to-red gradient splash screen to begin your Truth or Troll challenge
-2. **Understand the Format**: You'll play through exactly 10 rounds, with each round presenting you with two Reddit posts to analyze
+2. **Understand the Format**: You'll play through exactly 10 rounds, with each round presenting you with **one Reddit post** to analyze
 
-### Gameplay Mechanics
+### Core Gameplay
 
-3. **Analyze the Posts**: In each round, you'll see two Reddit posts displayed side-by-side with authentic formatting including:
+3. **Analyze Each Post**: In each round, you'll see a single Reddit post displayed with authentic formatting including:
 
-   - Subreddit names (e.g., r/todayilearned, r/cats, r/mildlyinteresting, r/facepalm, r/houseplants)
-   - Usernames and realistic upvote counts
+   - Subreddit names (e.g., r/todayilearned, r/cats, r/mildlyinteresting, r/AskReddit)
+   - Usernames and realistic upvote counts  
    - Post titles and detailed body content
    - Authentic Reddit styling and layout
 
-4. **Make Your Decision**: For each post, choose between two options:
+4. **Make Your Decision**: For the post, choose between two options:
 
-   - **"Real Post"** (green button) - If you believe it's genuine content from a real Reddit user
+   - **"Real Post"** (green button) - If you believe it's genuine content fetched from Reddit's API
    - **"Fake Post"** (red button) - If you think it's AI-generated content designed to mimic Reddit posts
 
 5. **Get Instant Feedback**: After voting, you'll immediately see:
 
    - Whether your choice was correct with animated feedback messages
-   - Visual indicators showing which post was real vs AI-generated
+   - Visual indicators showing if the post was real or AI-generated
    - Points earned (100 points for correct answers)
    - Button highlighting showing your selection and the correct answer
 
-6. **Progress Through Rounds**: After 2 seconds of feedback, the game automatically advances to the next round with fresh posts
+6. **Progress Through Rounds**: After 2 seconds of feedback, the game automatically advances to the next round with a fresh post
 
-### Progression and Competition
+### Advanced Features
 
-7. **Track Your Progress**: Watch your progress through the animated 10-round indicator at the bottom, with your current round pulsing in orange
-8. **Monitor Your Score**: Your running score is displayed in the header and updates in real-time as you play
-9. **View Leaderboards**: Access the global leaderboard at any time during gameplay to see how you rank against other players
-10. **Complete the Game**: After all 10 rounds, you'll be automatically taken to the leaderboard to see your final results
-11. **Check Your Stats**: View your final score, compare against top players, and see accuracy percentages
-12. **Play Again**: Use "Play Again" to start a fresh 10-round game or "Main Menu" to return to the splash screen
+7. **Balanced Question System**: The game uses a sophisticated algorithm to ensure fair distribution of real vs fake posts across all players
+8. **Fresh Content Every Session**: Each new game fetches completely unique posts from Reddit's API - no repeated content
+9. **Track Your Progress**: Watch your progress through the animated 10-round indicator at the bottom, with your current round pulsing in orange
+10. **Monitor Your Score**: Your running score is displayed in the header and updates in real-time as you play
+11. **View Leaderboards**: Access the global leaderboard at any time during gameplay to see how you rank against other players worldwide
+
+### Completion and Competition
+
+12. **Complete the Game**: After all 10 rounds, you'll be automatically taken to the leaderboard to see your final results
+13. **Check Your Stats**: View your final score, accuracy percentage, and compare against top players globally
+14. **Play Again**: Use "Play Again" to start a fresh 10-round game with completely new content, or "Main Menu" to return to the splash screen
 
 ## Technology Stack
 

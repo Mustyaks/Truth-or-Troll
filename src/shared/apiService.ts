@@ -220,6 +220,31 @@ export async function getBalancedQuestion(sessionId: string): Promise<BalancedQu
   }
 }
 
+// Track any post usage in session to prevent duplicates
+export async function trackPostUsage(postId: string, sessionId: string, postType: 'truth' | 'troll'): Promise<{ success: boolean; totalUsedPosts?: number; error?: string }> {
+  try {
+    const response = await fetch('/api/track-post-usage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ postId, sessionId, postType }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error tracking post usage:', error);
+    return {
+      success: false,
+      error: 'Failed to track post usage'
+    };
+  }
+}
+
 // Track fake post usage to prevent duplicates
 export async function trackFakePost(postId: string): Promise<{ success: boolean; totalUsedPosts?: number; error?: string }> {
   try {

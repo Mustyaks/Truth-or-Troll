@@ -405,11 +405,13 @@ export async function generateFakePost(topic?: string): Promise<{
     
     // If we've used ALL posts, reset the tracking (start over)
     if (allUnusedPosts.length === 0) {
-      console.log('All fake posts used, resetting for variety...');
+      console.log('🔄 All fake posts used, resetting pool for variety...');
       usedFakePosts.clear();
       topicPosts = mockPosts[selectedTopic as keyof typeof mockPosts] || mockPosts.technology || [];
       const selectedPost = topicPosts[Math.floor(Math.random() * topicPosts.length)]!;
       usedFakePosts.add(selectedPost.id);
+      
+      console.log('🎯 Selected fake post after reset:', selectedPost.id, selectedPost.title.substring(0, 50) + '...');
       
       return {
         title: selectedPost.title,
@@ -424,6 +426,8 @@ export async function generateFakePost(topic?: string): Promise<{
     // Select from any unused post
     const selectedPost = allUnusedPosts[Math.floor(Math.random() * allUnusedPosts.length)]!;
     usedFakePosts.add(selectedPost.id);
+    
+    console.log('🎯 Selected fake post from other topic:', selectedPost.id, selectedPost.title.substring(0, 50) + '...');
     
     // Update subreddit based on the actual topic selected
     const topicSubreddits = SUBREDDIT_MAP[selectedPost.topic as keyof typeof SUBREDDIT_MAP] || ['general'];
@@ -442,6 +446,8 @@ export async function generateFakePost(topic?: string): Promise<{
   // Select from available posts for this topic
   const selectedPost = availablePosts[Math.floor(Math.random() * availablePosts.length)]!;
   usedFakePosts.add(selectedPost.id);
+  
+  console.log('🎯 Selected fake post from topic:', selectedPost.id, selectedPost.title.substring(0, 50) + '...');
   
   return {
     title: selectedPost.title,
